@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../state/store';
 import { decodeWavBase64 } from '../lib/audio';
 import { ProgressText } from './ProgressText';
@@ -7,11 +7,13 @@ import { perfMark, perfMeasure } from '../lib/perf';
 export function ChunkFeed({
   audioContext,
   onNext,
+  headless = false,
 }: {
   audioContext: AudioContext;
   onNext: () => void;
+  headless?: boolean;
 }) {
-  const { chunks, currentIndex, setCurrentIndex, updateChunk, isPlaying, speed, setStopPlayback, cancelled } = useAppStore();
+  const { chunks, currentIndex, updateChunk, isPlaying, speed, setStopPlayback, cancelled, setPlaybackMetrics, setSeekCurrent } = useAppStore();
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -21,6 +23,7 @@ export function ChunkFeed({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const bufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
   const nextPrebuiltRef = useRef<{ id: string; src: AudioBufferSourceNode; gain: GainNode } | null>(null);
+  const currentChunkRef = useRef<string | null>(null);
 
   // Auto-scroll to bottom when new chunks append
   useEffect(() => {
@@ -56,6 +59,7 @@ export function ChunkFeed({
       if (cancelled) return;
       const c = chunks[currentIndex];
       if (!c || !c.audioBase64) return;
+      currentChunkRef.current = c.paragraph_id;
       setDecoding(true);
       try {
         if (audioContext.state === 'suspended') {
@@ -65,7 +69,9 @@ export function ChunkFeed({
         bufferCacheRef.current.set(c.paragraph_id, buffer);
         const src = audioContext.createBufferSource();
         src.buffer = buffer;
-        src.playbackRate.value = speed;
+        // Keep absolute time position when speed changes: compute remaining and reschedule
+        const rate = Math.max(0.25, Math.min(3.0, speed));
+        src.playbackRate.value = rate;
         const gain = audioContext.createGain();
         gain.gain.value = 1;
         src.connect(gain).connect(audioContext.destination);
@@ -76,14 +82,42 @@ export function ChunkFeed({
         sourceRef.current = src;
         gainRef.current = gain;
         setStopPlayback(() => () => {
-          try { sourceRef.current?.stop(); } catch {}
+          const cur = sourceRef.current;
+          if (cur) {
+            try { (cur as unknown as { onended: null }).onended = null; } catch {}
+            try { cur.stop(); } catch {}
+          }
+          // Reset current chunk to ready so replay resumes from same chunk
+          try { updateChunk(c.paragraph_id, { status: 'ready' }); } catch {}
           sourceRef.current = null;
           try { gainRef.current?.disconnect(); } catch {}
           gainRef.current = null;
+          try { nextPrebuiltRef.current?.src.stop(); } catch {}
+          nextPrebuiltRef.current = null;
         });
         updateChunk(c.paragraph_id, { status: 'playing' });
         startTimeRef.current = audioContext.currentTime;
         durationRef.current = buffer.duration / Math.max(0.01, src.playbackRate.value);
+        setPlaybackMetrics(0, durationRef.current);
+        setSeekCurrent(() => (offsetSec: number) => {
+          try { sourceRef.current?.stop(); } catch {}
+          const newsrc = audioContext.createBufferSource();
+          newsrc.buffer = buffer;
+          const rate = Math.max(0.25, Math.min(3.0, speed));
+          newsrc.playbackRate.value = rate;
+          const gain2 = audioContext.createGain();
+          gain2.gain.value = 1;
+          newsrc.connect(gain2).connect(audioContext.destination);
+          sourceRef.current = newsrc;
+          gainRef.current = gain2;
+          startTimeRef.current = audioContext.currentTime - Math.max(0, Math.min(buffer.duration, offsetSec)) / Math.max(0.01, rate);
+          durationRef.current = buffer.duration / Math.max(0.01, rate);
+          const ramp = 0.012;
+          const now2 = audioContext.currentTime;
+          gain2.gain.setValueAtTime(0.0, now2);
+          gain2.gain.linearRampToValueAtTime(1.0, now2 + ramp);
+          newsrc.start(0, Math.max(0, Math.min(buffer.duration, offsetSec)));
+        });
         // Short ramp to avoid clicks
         const ramp = 0.015;
         const now = audioContext.currentTime;
@@ -100,7 +134,7 @@ export function ChunkFeed({
           bufferCacheRef.current.set(n.paragraph_id, nbuf);
           const nsrc = audioContext.createBufferSource();
           nsrc.buffer = nbuf;
-          nsrc.playbackRate.value = speed;
+          nsrc.playbackRate.value = rate;
           const ngain = audioContext.createGain();
           ngain.gain.value = 0;
           nsrc.connect(ngain).connect(audioContext.destination);
@@ -122,6 +156,7 @@ export function ChunkFeed({
           const elapsed = audioContext.currentTime - startTimeRef.current;
           const p = Math.min(1, Math.max(0, elapsed / durationRef.current));
           setProgress(p);
+          setPlaybackMetrics(Math.max(0, elapsed), durationRef.current);
           if (p < 1) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
@@ -130,15 +165,62 @@ export function ChunkFeed({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, currentIndex, speed]);
+  }, [isPlaying, currentIndex]);
+
+  // React to speed changes without restarting playback
+  useEffect(() => {
+    const rate = Math.max(0.25, Math.min(3.0, speed));
+    const src = sourceRef.current;
+    if (src) {
+      try { src.playbackRate.value = rate; } catch {}
+      const dur = src.buffer ? src.buffer.duration : durationRef.current;
+      durationRef.current = dur / Math.max(0.01, rate);
+    }
+    // Rebuild next prebuilt source with updated rate and schedule time
+    const rebuildNext = async () => {
+      const n = chunks[currentIndex + 1];
+      if (!n || !n.audioBase64) return;
+      try { nextPrebuiltRef.current?.src.stop(); } catch {}
+      const nbuf = bufferCacheRef.current.get(n.paragraph_id) || await decodeWavBase64(audioContext, n.audioBase64);
+      bufferCacheRef.current.set(n.paragraph_id, nbuf);
+      const nsrc = audioContext.createBufferSource();
+      nsrc.buffer = nbuf;
+      nsrc.playbackRate.value = rate;
+      const ngain = audioContext.createGain();
+      ngain.gain.value = 0;
+      nsrc.connect(ngain).connect(audioContext.destination);
+      nextPrebuiltRef.current = { id: n.paragraph_id, src: nsrc, gain: ngain };
+      const ramp = 0.015;
+      const startAt = startTimeRef.current + durationRef.current;
+      ngain.gain.setValueAtTime(0.0, startAt);
+      ngain.gain.linearRampToValueAtTime(1.0, startAt + ramp);
+      try { nsrc.start(startAt); } catch {}
+    };
+    void rebuildNext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speed]);
+
+  // Auto-scroll only when rendering list (disabled in headless mode)
+  useEffect(() => {
+    if (headless) return;
+    const id = currentChunkRef.current;
+    if (!id) return;
+    const el = containerRef.current?.querySelector(`[data-pid="${id}"]`);
+    if (el && 'scrollIntoView' in el) {
+      (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [currentIndex, headless]);
 
   if (!audioContext) {
     return null;
   }
+  if (headless) {
+    return null;
+  }
   return (
     <div ref={containerRef} className="mx-auto w-[min(720px,92vw)] py-8 space-y-6">
-      {chunks.map((c, idx) => (
-        <div key={c.paragraph_id} className="border-b border-white/5 pb-4">
+      {chunks.filter((x) => x.status !== 'queued').map((c, idx) => (
+        <div key={c.paragraph_id} data-pid={c.paragraph_id} className="border-b border-white/5 pb-4">
           {idx === currentIndex ? (
             <ProgressText text={c.text} progress={isPlaying ? progress : 0} timings={c.timings} />
           ) : (
@@ -146,7 +228,12 @@ export function ChunkFeed({
           )}
         </div>
       ))}
-      {isDecoding && <p className="text-xs text-neutral-500">Decoding...</p>}
+      {isDecoding && (
+        <div className="flex items-center gap-2 text-xs text-neutral-500">
+          <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3a9 9 0 1 0 9 9"/></svg>
+          <span>Loading more…</span>
+        </div>
+      )}
     </div>
   );
 }

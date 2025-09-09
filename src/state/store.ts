@@ -17,6 +17,10 @@ type State = {
   cancelled: boolean;
   stopPlayback?: () => void;
   controllers: AbortController[];
+  clearTimers?: () => void;
+  currentElapsedSec: number;
+  currentDurationSec: number;
+  seekCurrent?: (offsetSec: number) => void;
   setDocId: (id: string) => void;
   setChunks: (c: Chunk[]) => void;
   updateChunk: (pid: string, data: Partial<Chunk>) => void;
@@ -27,6 +31,9 @@ type State = {
   setStopPlayback: (fn?: () => void) => void;
   addController: (c: AbortController) => void;
   cancelAllControllers: () => void;
+  setClearTimers: (fn?: () => void) => void;
+  setPlaybackMetrics: (elapsed: number, duration: number) => void;
+  setSeekCurrent: (fn?: (offsetSec: number) => void) => void;
 };
 
 export const useAppStore = create<State>((set) => ({
@@ -36,6 +43,10 @@ export const useAppStore = create<State>((set) => ({
   currentIndex: 0,
   cancelled: false,
   controllers: [],
+  clearTimers: undefined,
+  currentElapsedSec: 0,
+  currentDurationSec: 0,
+  seekCurrent: undefined,
   setDocId: (docId) => set({ docId }),
   setChunks: (chunks) => set({ chunks }),
   updateChunk: (paragraph_id, data) =>
@@ -54,6 +65,9 @@ export const useAppStore = create<State>((set) => ({
     }
     return { controllers: [] };
   }),
+  setClearTimers: (fn) => set({ clearTimers: fn }),
+  setPlaybackMetrics: (elapsed, duration) => set({ currentElapsedSec: elapsed, currentDurationSec: duration }),
+  setSeekCurrent: (fn) => set({ seekCurrent: fn }),
 }));
 
 

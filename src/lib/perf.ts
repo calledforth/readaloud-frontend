@@ -16,7 +16,6 @@ export function perfMeasure(name: string, startMark: string, endMark: string, lo
     const last = entries[entries.length - 1];
     const ms = last?.duration ?? undefined;
     if (log && typeof ms === 'number') {
-      // eslint-disable-next-line no-console
       console.log(`perf ${name}: ${Math.round(ms)}ms`);
     }
     return ms;
@@ -30,7 +29,6 @@ export function initPerfObserver(): () => void {
   const obs = new PerformanceObserver((list) => {
     for (const entry of list.getEntries()) {
       if (entry.entryType === 'measure') {
-        // eslint-disable-next-line no-console
         console.log(`perf ${entry.name}: ${Math.round(entry.duration)}ms`);
       }
     }
