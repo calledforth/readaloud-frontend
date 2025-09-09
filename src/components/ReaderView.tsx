@@ -11,15 +11,15 @@ export function ReaderView({
   // Keeping formatter around for future; no lint error since it's used in UI removal of slider
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-12 space-y-10">
+    <div className="flex-1 overflow-y-auto px-6 py-12 space-y-12">
       {chunks
         .filter((c) => c.status !== 'queued')
         .map((c, idx) => {
           const isCurrent = idx === currentIndex;
           const isPast = idx < currentIndex;
           return (
-            <div key={c.paragraph_id} className={`text-center transition-all ${isCurrent ? 'opacity-100' : isPast ? 'opacity-75' : 'opacity-60'}`}>
-              <p className={`mx-auto max-w-2xl leading-8 ${isCurrent ? 'text-neutral-100 text-lg' : 'text-neutral-400 text-base'}`}>
+            <div key={c.paragraph_id} className={`text-center transition-all ${isCurrent ? 'opacity-100' : isPast ? 'opacity-100' : 'opacity-60'}`}>
+              <p className={`mx-auto max-w-3xl leading-9 ${isCurrent ? 'text-neutral-100 text-xl md:text-2xl tracking-[0.02em]' : isPast ? 'text-neutral-100 text-xl md:text-2xl tracking-[0.02em]' : 'text-neutral-400 text-lg md:text-xl tracking-[0.02em]'}`}>
                 {c.timings && isCurrent
                   ? c.timings.map((w, i) => {
                       const cur = currentElapsedSec * 1000;
@@ -28,9 +28,19 @@ export function ReaderView({
                       return (
                         <span
                           key={i}
-                          className={`inline-block mr-1 ${isCurrentWord ? 'animate-[shimmer_0.8s_ease-in-out] text-white' : isPassed ? 'text-neutral-200' : 'text-neutral-400'}`}
+                          className={`inline-block mr-1 ${isCurrentWord ? 'text-white' : isPassed ? 'text-neutral-100' : 'text-neutral-400'}`}
                         >
-                          {w.word}
+                          {isCurrentWord
+                            ? Array.from(w.word).map((ch, j) => (
+                                <span
+                                  key={j}
+                                  className="inline-block wave-letter"
+                                  style={{ animationDelay: `${j * 0.03}s` }}
+                                >
+                                  {ch}
+                                </span>
+                              ))
+                            : w.word}
                         </span>
                       );
                     })
@@ -70,8 +80,8 @@ export function ReaderView({
       </div>
 
       <style jsx>{`
-        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-        .animate-[shimmer_0.8s_ease-in-out] { background: linear-gradient(90deg,transparent 0%,rgba(255,255,255,.8) 50%,transparent 100%); background-size:200% 100%; -webkit-background-clip:text; background-clip:text; }
+        @keyframes charwave { 0% { transform: translateY(0); opacity: 0.85; } 50% { transform: translateY(-0.06em); opacity: 1; } 100% { transform: translateY(0); opacity: 0.95; } }
+        .wave-letter { animation: charwave 420ms ease-in-out both; }
       `}</style>
     </div>
   );

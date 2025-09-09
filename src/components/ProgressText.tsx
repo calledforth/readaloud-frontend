@@ -7,9 +7,9 @@ export function ProgressText({ text, progress, timings }: { text: string; progre
   if (!timings || timings.length === 0) {
     return (
       <div className="relative">
-        <p className="text-base text-neutral-400 leading-8 whitespace-pre-wrap">{text}</p>
+        <p className="text-xl md:text-2xl text-neutral-400 leading-9 whitespace-pre-wrap">{text}</p>
         <p
-          className="pointer-events-none absolute inset-0 text-base text-neutral-100 leading-8 whitespace-pre-wrap overflow-hidden"
+          className="pointer-events-none absolute inset-0 text-xl md:text-2xl text-neutral-100 leading-9 whitespace-pre-wrap overflow-hidden"
           style={{ width: `${pct}%` }}
           aria-hidden
         >
@@ -27,8 +27,8 @@ export function ProgressText({ text, progress, timings }: { text: string; progre
 
   return (
     <div className="relative">
-      <p className="text-base text-neutral-400 leading-8 whitespace-pre-wrap">{text}</p>
-      <p className="pointer-events-none absolute inset-0 text-base text-neutral-100 leading-8 whitespace-pre-wrap overflow-hidden" aria-hidden>
+      <p className="text-xl md:text-2xl text-neutral-400 leading-9 tracking-[0.015em] whitespace-pre-wrap">{text}</p>
+      <p className="pointer-events-none absolute inset-0 text-xl md:text-2xl text-neutral-100 leading-9 tracking-[0.015em] whitespace-pre-wrap overflow-hidden" aria-hidden>
         {text.slice(0, charCut)}
       </p>
     </div>

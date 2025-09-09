@@ -3,7 +3,7 @@ import { create } from 'zustand';
 export type Chunk = {
   paragraph_id: string;
   text: string;
-  status: 'queued' | 'synth' | 'ready' | 'playing' | 'done';
+  status: 'queued' | 'synth' | 'ready' | 'playing' | 'paused' | 'done';
   audioBase64?: string;
   timings?: Array<{ word: string; start_ms: number; end_ms: number; char_start: number; char_end: number }>;
 };

@@ -24,6 +24,39 @@ export function ChunkFeed({
   const bufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
   const nextPrebuiltRef = useRef<{ id: string; src: AudioBufferSourceNode; gain: GainNode } | null>(null);
   const currentChunkRef = useRef<string | null>(null);
+  const pausedOffsetRef = useRef<number>(0);
+
+  // Pause helper that snaps to current word boundary and cancels any scheduled nodes
+  const pauseCurrent = (snapToWord: boolean) => {
+    const cur = sourceRef.current;
+    const c = chunks[currentIndex];
+    if (!cur || !c) return;
+    try {
+      const rateNow = Math.max(0.25, Math.min(3.0, speed));
+      const elapsed = Math.max(0, audioContext.currentTime - startTimeRef.current);
+      let offsetSec = elapsed * rateNow;
+      const maxSec = (cur.buffer ? cur.buffer.duration : durationRef.current * rateNow);
+      offsetSec = Math.max(0, Math.min(maxSec, offsetSec));
+      if (snapToWord && c.timings && c.timings.length > 0) {
+        const curMs = offsetSec * 1000;
+        const idx = c.timings.findIndex((t) => curMs < t.end_ms);
+        const snapMs = idx >= 0 ? c.timings[idx].start_ms : c.timings[c.timings.length - 1].start_ms;
+        offsetSec = Math.max(0, Math.min(maxSec, snapMs / 1000));
+      }
+      pausedOffsetRef.current = offsetSec;
+      const durScaled = cur.buffer ? cur.buffer.duration / Math.max(0.01, rateNow) : durationRef.current;
+      setPlaybackMetrics(offsetSec / Math.max(0.01, rateNow), durScaled);
+    } catch {}
+    try { (cur as unknown as { onended: null }).onended = null; } catch {}
+    try { cur.stop(); } catch {}
+    sourceRef.current = null;
+    try { gainRef.current?.disconnect(); } catch {}
+    gainRef.current = null;
+    try { nextPrebuiltRef.current?.src.stop(); } catch {}
+    nextPrebuiltRef.current = null;
+    try { updateChunk(c.paragraph_id, { status: 'paused' }); } catch {}
+  };
+  
 
   // Auto-scroll to bottom when new chunks append
   useEffect(() => {
@@ -52,7 +85,7 @@ export function ChunkFeed({
   // Play current chunk when state changes
   useEffect(() => {
     if (!isPlaying) {
-      sourceRef.current?.stop();
+      pauseCurrent(true);
       return;
     }
     void (async () => {
@@ -81,26 +114,17 @@ export function ChunkFeed({
         };
         sourceRef.current = src;
         gainRef.current = gain;
-        setStopPlayback(() => () => {
-          const cur = sourceRef.current;
-          if (cur) {
-            try { (cur as unknown as { onended: null }).onended = null; } catch {}
-            try { cur.stop(); } catch {}
-          }
-          // Reset current chunk to ready so replay resumes from same chunk
-          try { updateChunk(c.paragraph_id, { status: 'ready' }); } catch {}
-          sourceRef.current = null;
-          try { gainRef.current?.disconnect(); } catch {}
-          gainRef.current = null;
-          try { nextPrebuiltRef.current?.src.stop(); } catch {}
-          nextPrebuiltRef.current = null;
-        });
+        setStopPlayback(() => () => pauseCurrent(true));
         updateChunk(c.paragraph_id, { status: 'playing' });
-        startTimeRef.current = audioContext.currentTime;
-        durationRef.current = buffer.duration / Math.max(0.01, src.playbackRate.value);
-        setPlaybackMetrics(0, durationRef.current);
+        const startRate = Math.max(0.25, Math.min(3.0, src.playbackRate.value));
+        const resumeAt = Math.max(0, Math.min(buffer.duration, pausedOffsetRef.current || 0));
+        pausedOffsetRef.current = 0;
+        startTimeRef.current = audioContext.currentTime - (resumeAt / Math.max(0.01, startRate));
+        durationRef.current = buffer.duration / Math.max(0.01, startRate);
+        setPlaybackMetrics(resumeAt / Math.max(0.01, startRate), durationRef.current);
         setSeekCurrent(() => (offsetSec: number) => {
           try { sourceRef.current?.stop(); } catch {}
+          pausedOffsetRef.current = Math.max(0, Math.min(buffer.duration, offsetSec));
           const newsrc = audioContext.createBufferSource();
           newsrc.buffer = buffer;
           const rate = Math.max(0.25, Math.min(3.0, speed));
@@ -110,13 +134,13 @@ export function ChunkFeed({
           newsrc.connect(gain2).connect(audioContext.destination);
           sourceRef.current = newsrc;
           gainRef.current = gain2;
-          startTimeRef.current = audioContext.currentTime - Math.max(0, Math.min(buffer.duration, offsetSec)) / Math.max(0.01, rate);
+          startTimeRef.current = audioContext.currentTime - Math.max(0, Math.min(buffer.duration, pausedOffsetRef.current)) / Math.max(0.01, rate);
           durationRef.current = buffer.duration / Math.max(0.01, rate);
           const ramp = 0.012;
           const now2 = audioContext.currentTime;
           gain2.gain.setValueAtTime(0.0, now2);
           gain2.gain.linearRampToValueAtTime(1.0, now2 + ramp);
-          newsrc.start(0, Math.max(0, Math.min(buffer.duration, offsetSec)));
+          newsrc.start(0, pausedOffsetRef.current);
         });
         // Short ramp to avoid clicks
         const ramp = 0.015;
@@ -124,7 +148,7 @@ export function ChunkFeed({
         gain.gain.setValueAtTime(0.0, now);
         gain.gain.linearRampToValueAtTime(1.0, now + ramp);
         perfMark(`chunk-start:${c.paragraph_id}`);
-        src.start(0);
+        try { src.start(0, resumeAt); } catch { src.start(0); }
 
         // Prebuild next source for gapless start
         const nextIdx = currentIndex + 1;

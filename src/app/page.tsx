@@ -5,16 +5,24 @@ import { prepareDocument, synthesizeChunk, health } from "../lib/provider/mock";
 import { ChunkFeed } from "../components/ChunkFeed";
 import { ReaderView } from "../components/ReaderView";
 import { perfMark, perfMeasure, initPerfObserver } from "../lib/perf";
+import { HeroLogo } from "../components/HeroLogo";
+import { ConnectionStatus } from "../components/ConnectionStatus";
+import { CollapsingIconButton } from "../components/CollapsingIconButton";
+import { TopBar } from "../components/TopBar";
+import { TruncatedPreview } from "../components/TruncatedPreview";
+import { SegmentedSelector, type Mode } from "../components/SegmentedSelector";
+import { PdfDropzone } from "../components/PdfDropzone";
+import { AutoTextarea } from "../components/AutoTextarea";
 
 export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const { setDocId, setChunks, chunks, setCurrentIndex, currentIndex, setPlaying, addController, setClearTimers } = useAppStore();
   const [busy, setBusy] = useState(false);
-  const [healthStatus, setHealthStatus] = useState<string>("unknown");
   const [textInput, setTextInput] = useState<string>("This is a demo paragraph.\n\nThis is the next paragraph to synthesize.");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const teardownPerfRef = useRef<() => void>(() => {});
   const [isLocalDemo, setIsLocalDemo] = useState(false);
+  const [mode, setMode] = useState<Mode>('text');
 
   // Initialize perf observer once
   React.useEffect(() => {
@@ -30,15 +38,6 @@ export default function Home() {
       setIsLocalDemo(/^localhost$|^127\.0\.0\.1$/.test(window.location.hostname));
     } catch {}
   }, []);
-
-  const onHealth = async () => {
-    try {
-      const resp = await health();
-      setHealthStatus(resp.status + " " + resp.version);
-    } catch {
-      setHealthStatus("error");
-    }
-  };
 
   const onPrepare = async () => {
     if (busy) return;
@@ -178,54 +177,70 @@ export default function Home() {
     });
   }
 
+  // removed inline component wrappers to avoid remounting on each render (which caused input blur)
+
+  const isProcessing = audioContextRef.current && chunks.some((c) => c.status !== 'queued');
   return (
-    <div className="min-h-screen bg-black text-neutral-200">
-      <div className="mx-auto w-[min(720px,92vw)] py-6 space-y-3">
-        <div className="flex items-center justify-center gap-2">
-          <button onClick={onHealth} className="rounded-md border border-white/10 bg-white/10 p-2" aria-label="Health">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zm-1-5h2v2h-2v-2zm0-8h2v6h-2V8z"/></svg>
-          </button>
-          <span className="text-xs text-neutral-400">{healthStatus}</span>
-        </div>
-        <div className="mx-auto w-[min(720px,92vw)]">
-          <textarea
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Paste text here"
-            className="w-full max-h-64 h-40 bg-transparent border border-white/10 rounded-md text-sm p-3 overflow-auto"
-          />
-        </div>
-        <div className="flex items-center justify-center gap-3">
-          <input type="file" accept="application/pdf" onChange={onPdfChange} className="text-xs" />
-          {pdfFile && <span className="text-xs text-neutral-400">{pdfFile.name}</span>}
-        </div>
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={onPrepare}
-            disabled={busy}
-            className="rounded-full border border-white/10 bg-white text-black hover:bg-neutral-200 p-2"
-            aria-label="Start"
-            title="Start"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          </button>
-          {isLocalDemo && (
-            <button
-              onClick={onStartDemo}
+    <div className="min-h-screen bg-neutral-900 text-neutral-200">
+      {!isProcessing ? (
+        <div className="mx-auto w-[min(820px,92vw)] pt-16 pb-10 space-y-6">
+          <div className="flex items-center justify-center">
+            <HeroLogo />
+          </div>
+          <div className="flex items-center justify-center">
+            <ConnectionStatus />
+          </div>
+          <div className="flex items-center justify-center">
+            <SegmentedSelector value={mode} onChange={setMode} />
+          </div>
+          <div className="mx-auto w-[min(820px,92vw)]">
+            {mode === 'text' ? (
+              <AutoTextarea value={textInput} onChange={setTextInput} placeholder="Type or paste text here" />
+            ) : (
+              <PdfDropzone onFile={(f) => setPdfFile(f)} file={pdfFile} onClear={() => setPdfFile(null)} />
+            )}
+          </div>
+          {/* removed legacy file input row to keep UI minimal */}
+          <div className="flex items-center justify-center gap-3">
+            <CollapsingIconButton
+              onClick={onPrepare}
               disabled={busy}
-              className="rounded-full border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 p-2"
-              aria-label="Demo"
-              title="Local-only demo"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5L5.5 20l2-7L2 9h7z"/></svg>
-            </button>
-          )}
+              label="Start processing"
+              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>}
+            />
+            {isLocalDemo && (
+              <CollapsingIconButton
+                onClick={onStartDemo}
+                disabled={busy}
+                label="Demo"
+                icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5L5.5 20l2-7L2 9h7z"/></svg>}
+                className="border border-emerald-400/30 text-emerald-300"
+              />
+            )}
+          </div>
         </div>
-      </div>
-      {audioContextRef.current && chunks.some((c) => c.status !== 'queued') && (
+      ) : (
         <>
-          <ChunkFeed headless audioContext={audioContextRef.current} onNext={onNext} />
-          <ReaderView onTogglePlay={() => useAppStore.getState().setPlaying(!useAppStore.getState().isPlaying)} />
+          <TopBar
+            onHome={() => {
+              // Return to landing
+              try { useAppStore.getState().setPlaying(false); } catch {}
+              try { useAppStore.getState().cancelAllControllers(); } catch {}
+              try { useAppStore.getState().setChunks([]); } catch {}
+              try { setPdfFile(null); } catch {}
+            }}
+            right={
+              <button className="p-2 rounded-full border border-white/10" aria-label="Settings" style={{ marginRight: 0 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v1.06a7.003 7.003 0 0 1 3.94 2.3l.75-.75a1 1 0 0 1 1.41 1.42l-.75.75A7.003 7.003 0 0 1 20.94 12H22a1 1 0 1 1 0 2h-1.06a7.003 7.003 0 0 1-2.3 3.94l.75.75a1 1 0 0 1-1.42 1.41l-.75-.75A7.003 7.003 0 0 1 13 19.94V21a1 1 0 1 1-2 0v-1.06a7.003 7.003 0 0 1-3.94-2.3l-.75.75a1 1 0 0 1-1.41-1.42l.75-.75A7.003 7.003 0 0 1 4.06 14H3a1 1 0 1 1 0-2h1.06a7.003 7.003 0 0 1 2.3-3.94l-.75-.75a1 1 0 0 1 1.42-1.41l.75.75A7.003 7.003 0 0 1 11 4.06V3a1 1 0 0 1 1-1Zm0 5a5 5 0 1 0 .001 10.001A5 5 0 0 0 12 7Z"/></svg>
+              </button>
+            }
+          />
+          <div className="pt-16" />
+          <div className="mx-auto w-[min(920px,95vw)] py-6 space-y-6">
+            <TruncatedPreview text={textInput} />
+            <ChunkFeed headless audioContext={audioContextRef.current as AudioContext} onNext={onNext} />
+            <ReaderView onTogglePlay={() => useAppStore.getState().setPlaying(!useAppStore.getState().isPlaying)} />
+          </div>
         </>
       )}
     </div>
