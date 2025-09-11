@@ -23,6 +23,7 @@ const roboto = Roboto({
 export const metadata: Metadata = {
   title: "ReadAloud",
   description: "Turn text into natural speech",
+  icons: [{ rel: 'icon', url: '/favicon.ico' }],
 };
 
 export default function RootLayout({

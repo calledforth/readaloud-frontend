@@ -26,6 +26,11 @@ export function ChunkFeed({
   const currentChunkRef = useRef<string | null>(null);
   const pausedOffsetRef = useRef<number>(0);
 
+  // Ensure resumes start at 0 when currentIndex changes (e.g., after reset)
+  useEffect(() => {
+    pausedOffsetRef.current = 0;
+  }, [currentIndex]);
+
   // Pause helper that snaps to current word boundary and cancels any scheduled nodes
   const pauseCurrent = (snapToWord: boolean) => {
     const cur = sourceRef.current;
@@ -110,7 +115,17 @@ export function ChunkFeed({
         src.connect(gain).connect(audioContext.destination);
         src.onended = () => {
           updateChunk(c.paragraph_id, { status: 'done' });
-          onNext();
+          // Determine if this was the final chunk; if so, stop playing
+          try {
+            const s = useAppStore.getState();
+            const atEnd = (s.currentIndex + 1) >= s.chunks.length;
+            onNext();
+            if (atEnd) {
+              try { s.setPlaying(false); } catch {}
+            }
+          } catch {
+            onNext();
+          }
         };
         sourceRef.current = src;
         gainRef.current = gain;
@@ -123,24 +138,32 @@ export function ChunkFeed({
         durationRef.current = buffer.duration / Math.max(0.01, startRate);
         setPlaybackMetrics(resumeAt / Math.max(0.01, startRate), durationRef.current);
         setSeekCurrent(() => (offsetSec: number) => {
+          const clamped = Math.max(0, Math.min(buffer.duration, offsetSec));
+          const rate = Math.max(0.25, Math.min(3.0, speed));
+          const playing = useAppStore.getState().isPlaying;
+          pausedOffsetRef.current = clamped;
+          if (!playing) {
+            // Only update metrics and paused offset; do not rebuild or start audio
+            const durScaled = buffer.duration / Math.max(0.01, rate);
+            setPlaybackMetrics(clamped / Math.max(0.01, rate), durScaled);
+            return;
+          }
           try { sourceRef.current?.stop(); } catch {}
-          pausedOffsetRef.current = Math.max(0, Math.min(buffer.duration, offsetSec));
           const newsrc = audioContext.createBufferSource();
           newsrc.buffer = buffer;
-          const rate = Math.max(0.25, Math.min(3.0, speed));
           newsrc.playbackRate.value = rate;
           const gain2 = audioContext.createGain();
           gain2.gain.value = 1;
           newsrc.connect(gain2).connect(audioContext.destination);
           sourceRef.current = newsrc;
           gainRef.current = gain2;
-          startTimeRef.current = audioContext.currentTime - Math.max(0, Math.min(buffer.duration, pausedOffsetRef.current)) / Math.max(0.01, rate);
+          startTimeRef.current = audioContext.currentTime - clamped / Math.max(0.01, rate);
           durationRef.current = buffer.duration / Math.max(0.01, rate);
           const ramp = 0.012;
           const now2 = audioContext.currentTime;
           gain2.gain.setValueAtTime(0.0, now2);
           gain2.gain.linearRampToValueAtTime(1.0, now2 + ramp);
-          newsrc.start(0, pausedOffsetRef.current);
+          newsrc.start(0, clamped);
         });
         // Short ramp to avoid clicks
         const ramp = 0.015;

@@ -13,6 +13,9 @@ import { TruncatedPreview } from "../components/TruncatedPreview";
 import { SegmentedSelector, type Mode } from "../components/SegmentedSelector";
 import { PdfDropzone } from "../components/PdfDropzone";
 import { AutoTextarea } from "../components/AutoTextarea";
+import { MiniPlayer } from "../components/MiniPlayer";
+import { AutoHideChrome } from "../components/AutoHideChrome";
+import { Settings, Play, Sparkles } from "lucide-react";
 
 export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -201,26 +204,28 @@ export default function Home() {
             )}
           </div>
           {/* removed legacy file input row to keep UI minimal */}
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center justify-center gap-4">
             <CollapsingIconButton
               onClick={onPrepare}
               disabled={busy}
               label="Start processing"
-              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>}
+              className="text-emerald-400"
+              icon={<Play className="w-5 h-5" />}
             />
             {isLocalDemo && (
               <CollapsingIconButton
                 onClick={onStartDemo}
                 disabled={busy}
                 label="Demo"
-                icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5L5.5 20l2-7L2 9h7z"/></svg>}
-                className="border border-emerald-400/30 text-emerald-300"
+                icon={<Sparkles className="w-5 h-5" />}
+                className="text-sky-400"
               />
             )}
           </div>
         </div>
       ) : (
         <>
+          <AutoHideChrome inactivityMs={1500} />
           <TopBar
             onHome={() => {
               // Return to landing
@@ -230,8 +235,8 @@ export default function Home() {
               try { setPdfFile(null); } catch {}
             }}
             right={
-              <button className="p-2 rounded-full border border-white/10" aria-label="Settings" style={{ marginRight: 0 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v1.06a7.003 7.003 0 0 1 3.94 2.3l.75-.75a1 1 0 0 1 1.41 1.42l-.75.75A7.003 7.003 0 0 1 20.94 12H22a1 1 0 1 1 0 2h-1.06a7.003 7.003 0 0 1-2.3 3.94l.75.75a1 1 0 0 1-1.42 1.41l-.75-.75A7.003 7.003 0 0 1 13 19.94V21a1 1 0 1 1-2 0v-1.06a7.003 7.003 0 0 1-3.94-2.3l-.75.75a1 1 0 0 1-1.41-1.42l.75-.75A7.003 7.003 0 0 1 4.06 14H3a1 1 0 1 1 0-2h1.06a7.003 7.003 0 0 1 2.3-3.94l-.75-.75a1 1 0 0 1 1.42-1.41l.75.75A7.003 7.003 0 0 1 11 4.06V3a1 1 0 0 1 1-1Zm0 5a5 5 0 1 0 .001 10.001A5 5 0 0 0 12 7Z"/></svg>
+              <button className="p-2 rounded-full" aria-label="Settings" style={{ marginRight: 0 }}>
+                <Settings className="w-4 h-4 text-white" />
               </button>
             }
           />
@@ -240,6 +245,7 @@ export default function Home() {
             <TruncatedPreview text={textInput} />
             <ChunkFeed headless audioContext={audioContextRef.current as AudioContext} onNext={onNext} />
             <ReaderView onTogglePlay={() => useAppStore.getState().setPlaying(!useAppStore.getState().isPlaying)} />
+            <MiniPlayer />
           </div>
         </>
       )}

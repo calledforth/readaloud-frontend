@@ -1,5 +1,6 @@
 "use client";
 import React from 'react';
+import { FileText } from 'lucide-react';
 
 export function PdfDropzone({ onFile, file, onClear }: { onFile: (f: File) => void; file?: File | null; onClear?: () => void }) {
   const [dragOver, setDragOver] = React.useState(false);
@@ -54,11 +55,7 @@ export function PdfDropzone({ onFile, file, onClear }: { onFile: (f: File) => vo
       <div className="group flex items-center justify-between rounded-xl border border-white/15 bg-transparent px-4 py-3 hover:border-white/30 transition">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-md grid place-items-center border border-red-400/40 bg-red-500/10 text-red-300">
-            {/* PDF icon */}
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" fill="currentColor" opacity="0.85"/>
-              <path d="M14 2v5h5" fill="none" stroke="currentColor" strokeWidth="1.5"/>
-            </svg>
+            <FileText className="w-4 h-4" />
           </div>
           <div className="min-w-0">
             <div className="text-sm text-neutral-100 truncate">{file.name}</div>
@@ -88,7 +85,7 @@ export function PdfDropzone({ onFile, file, onClear }: { onFile: (f: File) => vo
     >
       <div className="flex flex-col items-center gap-3 text-neutral-300">
         <div className="w-10 h-10 rounded-full bg-black/70 grid place-items-center border border-white/10">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <FileText className="w-4 h-4" />
         </div>
         <div className="text-sm">Click to select</div>
         <div className="text-xs text-neutral-500">or drag and drop PDF here</div>

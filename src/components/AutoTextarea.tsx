@@ -5,7 +5,7 @@ export function AutoTextarea({
   value,
   onChange,
   placeholder,
-  minRows = 4,
+  minRows = 6,
   maxHeightPx = 240,
 }: {
   value: string;
@@ -25,14 +25,31 @@ export function AutoTextarea({
   }, [value, maxHeightPx]);
 
   return (
-    <textarea
-      ref={ref}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      rows={minRows}
-      className="w-full bg-transparent border border-white/10 rounded-md text-sm p-3 overflow-auto scrollbar-thin resize-none"
-    />
+    <div>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={minRows}
+        className="w-full bg-transparent border border-white/10 rounded-md text-sm p-3 overflow-auto scrollbar-thin resize-none transition-colors duration-300 focus:outline-none focus:border-white/30"
+      />
+      {value && (
+        <div className="mt-2 text-xs text-neutral-400 flex items-center gap-4">
+          <Meta label="Characters" value={value.replace(/\s/g, '').length.toString()} />
+          <Meta label="Words" value={(value.trim().match(/\b\w+\b/g)?.length || 0).toString()} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="inline-flex items-center gap-2">
+      <span className="text-neutral-500">{label}</span>
+      <span className="text-neutral-300 tabular-nums">{value}</span>
+    </div>
   );
 }
 

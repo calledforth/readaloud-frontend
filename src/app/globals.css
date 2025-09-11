@@ -20,6 +20,17 @@ body {
   font-family: var(--font-roboto), var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+/* Auto-hide chrome (navbar + mini player) */
+[data-chrome-hidden="true"] .auto-hide-chrome {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s ease-in-out;
+}
+[data-chrome-hidden="false"] .auto-hide-chrome {
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+}
+
 /* Thin, minimal scrollbars */
 * {
   scrollbar-width: thin;
@@ -30,9 +41,13 @@ body {
   width: 6px;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: rgba(255,255,255,0.25);
+  background-color: rgba(255,255,255,0.18);
   border-radius: 9999px;
 }
 *::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(0,0,0,0.4);
 }
+
+/* Hide scrollbar for specific containers */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
