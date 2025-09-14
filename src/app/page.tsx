@@ -1,7 +1,7 @@
 "use client";
 import React, { useRef, useState } from "react";
 import { useAppStore } from "../state/store";
-import { prepareDocument, synthesizeChunk, health } from "../lib/provider/mock";
+import { prepareDocument, synthesizeChunk } from "../lib/provider";
 import { ChunkFeed } from "../components/ChunkFeed";
 import { ReaderView } from "../components/ReaderView";
 import { perfMark, perfMeasure, initPerfObserver } from "../lib/perf";
@@ -158,10 +158,6 @@ export default function Home() {
     }
   };
 
-  function onPdfChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setPdfFile(f);
-  }
 
   function fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Settings } from 'lucide-react';
 import { HeroLogo } from './HeroLogo';
 
 export function TopBar({ right, onHome }: { right?: React.ReactNode; onHome?: () => void }) {

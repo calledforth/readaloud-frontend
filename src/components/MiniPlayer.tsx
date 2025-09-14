@@ -17,8 +17,11 @@ export function MiniPlayer() {
     chunks,
   } = useAppStore();
 
+  // Move hooks to the top before any early returns
+  const [openSpeed, setOpenSpeed] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+
   const hasAudio = chunks.some((c) => c.status !== 'queued');
-  if (!hasAudio) return null;
 
   const onToggle = () => setPlaying(!isPlaying);
   const onReset = () => {
@@ -41,8 +44,6 @@ export function MiniPlayer() {
   };
 
   const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
-  const [openSpeed, setOpenSpeed] = React.useState(false);
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     if (!openSpeed) return;
@@ -64,6 +65,9 @@ export function MiniPlayer() {
       document.removeEventListener('keydown', onKey);
     };
   }, [openSpeed]);
+
+  // Early return after all hooks
+  if (!hasAudio) return null;
 
   return (
     <div ref={containerRef} className="auto-hide-chrome fixed bottom-16 right-8 z-40 select-none">

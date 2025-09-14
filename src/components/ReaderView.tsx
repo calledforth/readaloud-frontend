@@ -2,11 +2,11 @@ import React from 'react';
 import { useAppStore } from '../state/store';
 
 export function ReaderView({
-  onTogglePlay,
+  onTogglePlay, // eslint-disable-line @typescript-eslint/no-unused-vars
 }: {
   onTogglePlay: () => void;
 }) {
-  const { chunks, currentIndex, isPlaying, speed, setSpeed, currentElapsedSec } = useAppStore();
+  const { chunks, currentIndex, currentElapsedSec } = useAppStore();
 
   // Keeping formatter around for future; no lint error since it's used in UI removal of slider
 
