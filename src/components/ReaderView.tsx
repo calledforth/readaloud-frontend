@@ -64,8 +64,9 @@ export function ReaderView({
       {/* MiniPlayer renders separately */}
 
       <style jsx>{`
-        @keyframes charwave { 0% { transform: translateY(0); opacity: 0.85; } 50% { transform: translateY(-0.06em); opacity: 1; } 100% { transform: translateY(0); opacity: 0.95; } }
-        .wave-letter { animation: charwave 420ms ease-in-out both; }
+        /* Subtle wave: opacity shimmer only, no vertical movement to avoid layout jump */
+        @keyframes charwave { 0% { opacity: 0.85; } 50% { opacity: 1.0; } 100% { opacity: 0.95; } }
+        .wave-letter { animation: charwave 420ms ease-in-out both; will-change: opacity; }
       `}</style>
     </div>
   );

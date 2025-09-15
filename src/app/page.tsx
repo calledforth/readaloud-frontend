@@ -15,7 +15,8 @@ import { PdfDropzone } from "../components/PdfDropzone";
 import { AutoTextarea } from "../components/AutoTextarea";
 import { MiniPlayer } from "../components/MiniPlayer";
 import { AutoHideChrome } from "../components/AutoHideChrome";
-import { Settings, Play, Sparkles } from "lucide-react";
+import { Settings, Play, Sparkles, ChevronDown, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { VoiceSelect } from "../components/VoiceSelect";
 
 export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -26,6 +27,12 @@ export default function Home() {
   const teardownPerfRef = useRef<() => void>(() => {});
   const [isLocalDemo, setIsLocalDemo] = useState(false);
   const [mode, setMode] = useState<Mode>('text');
+  const [voice, setVoice] = useState<string>('af_heart');
+  const [error, setError] = useState<string | null>(null);
+  type UiStatus = { kind: 'idle' | 'progress' | 'ok' | 'error'; message: string } | null;
+  const [status, setStatus] = useState<UiStatus>(null);
+  const [textErrorOnce, setTextErrorOnce] = useState(false);
+  const [pdfErrorOnce, setPdfErrorOnce] = useState(false);
 
   // Initialize perf observer once
   React.useEffect(() => {
@@ -44,6 +51,22 @@ export default function Home() {
 
   const onPrepare = async () => {
     if (busy) return;
+    setError(null);
+    // Validate and block if invalid
+    if (mode === 'text' && (!textInput || textInput.trim().length === 0)) {
+      setError('Text is empty. Please enter some text.');
+      setStatus({ kind: 'error', message: 'Text is empty.' });
+      setTextErrorOnce(true);
+      window.setTimeout(() => { setError(null); setStatus(null); setTextErrorOnce(false); }, 3000);
+      return;
+    }
+    if (mode === 'pdf' && !pdfFile) {
+      setError('No PDF selected. Please choose a PDF file.');
+      setStatus({ kind: 'error', message: 'No PDF selected.' });
+      setPdfErrorOnce(true);
+      window.setTimeout(() => { setError(null); setStatus(null); setPdfErrorOnce(false); }, 3000);
+      return;
+    }
     setBusy(true);
     try {
       // Create AudioContext on user gesture to satisfy autoplay policies
@@ -68,9 +91,11 @@ export default function Home() {
       const pstart = `prepare-start`;
       const pend = `prepare-end`;
       perfMark(pstart);
+      setStatus({ kind: 'progress', message: 'Preparing document…' });
       const { doc_id, paragraphs } = await prepareDocument(textInput, pdfBase64, { signal: ctrl.signal, timeoutMs: 30000 });
       perfMark(pend);
       perfMeasure(`prepare`, pstart, pend);
+      setStatus({ kind: 'ok', message: `Prepared ${paragraphs.length} paragraph(s). Starting synthesis…` });
       setDocId(doc_id);
       setChunks(
         paragraphs.map((p) => ({ paragraph_id: p.paragraph_id, text: p.text, status: "queued" }))
@@ -80,6 +105,11 @@ export default function Home() {
       await prefetchByIndex(0);
       await prefetchByIndex(1);
       setPlaying(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error occurred while preparing the document.';
+      setError(msg);
+      setStatus({ kind: 'error', message: msg });
+      window.setTimeout(() => { setError(null); setStatus(null); }, 3500);
     } finally {
       setBusy(false);
     }
@@ -89,26 +119,49 @@ export default function Home() {
     const s = useAppStore.getState();
     const c = s.chunks[idx];
     if (!c || c.status !== "queued") return;
+    const docId = s.docId;
+    if (!docId) {
+      console.warn(`[prefetchByIndex] Missing docId for paragraph`, c.paragraph_id);
+      return;
+    }
     const ctrl = new AbortController();
     addController(ctrl);
     const start = `prefetch-start:${c.paragraph_id}`;
     const end = `prefetch-end:${c.paragraph_id}`;
     perfMark(start);
-    const res = await synthesizeChunk("doc", c.paragraph_id, c.text, 24000, { signal: ctrl.signal, timeoutMs: 30000 });
-    perfMark(end);
-    perfMeasure(`prefetch:${c.paragraph_id}`, start, end);
-    s.updateChunk(c.paragraph_id, {
-      status: "ready",
-      audioBase64: res.audio_base64,
-      timings: res.timings,
-    });
+    try {
+      setStatus({ kind: 'progress', message: `Synthesis ${c.paragraph_id}…` });
+      const res = await synthesizeChunk(docId, c.paragraph_id, c.text, 24000, { signal: ctrl.signal, timeoutMs: 30000, voice });
+      perfMark(end);
+      perfMeasure(`prefetch:${c.paragraph_id}`, start, end);
+      s.updateChunk(c.paragraph_id, {
+        status: "ready",
+        audioBase64: res.audio_base64,
+        timings: res.timings,
+      });
+      setStatus({ kind: 'ok', message: `Ready ${c.paragraph_id}` });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Synthesis failed.';
+      setError(msg);
+      setStatus({ kind: 'error', message: msg });
+      window.setTimeout(() => { setError(null); setStatus(null); }, 3500);
+      perfMark(end);
+      perfMeasure(`prefetch:${c.paragraph_id}`, start, end);
+    }
   };
 
   const onNext = async () => {
     const next = currentIndex + 1;
+    const s = useAppStore.getState();
+    const atEnd = next >= s.chunks.length;
+    if (atEnd) {
+      try { s.setPlaying(false); } catch {}
+      return;
+    }
     setCurrentIndex(next);
+    const willBeEnd = next + 1 >= s.chunks.length;
     await prefetchByIndex(next);
-    await prefetchByIndex(next + 1);
+    if (!willBeEnd) await prefetchByIndex(next + 1);
   };
 
   // Local-only functional demo (no backend). Simulates staggered chunk arrivals.
@@ -194,11 +247,37 @@ export default function Home() {
           </div>
           <div className="mx-auto w-[min(820px,92vw)]">
             {mode === 'text' ? (
-              <AutoTextarea value={textInput} onChange={setTextInput} placeholder="Type or paste text here" />
+              <AutoTextarea value={textInput} onChange={setTextInput} placeholder="Type or paste text here" error={textErrorOnce} />
             ) : (
-              <PdfDropzone onFile={(f) => setPdfFile(f)} file={pdfFile} onClear={() => setPdfFile(null)} />
+              <PdfDropzone onFile={(f) => setPdfFile(f)} file={pdfFile} onClear={() => setPdfFile(null)} error={pdfErrorOnce} />
             )}
           </div>
+           {/* Model and Voice picker */}
+           <div className="mx-auto w-[min(820px,92vw)] flex items-center gap-6 text-sm">
+             <div className="flex items-center gap-3">
+               <label className="text-neutral-400">Model</label>
+               <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-white/10 bg-transparent text-sm text-white">
+                 <span className="tabular-nums">Kokoro</span>
+               </div>
+             </div>
+             <div className="flex items-center gap-3">
+               <label className="text-neutral-400">Voice</label>
+               <VoiceSelect
+                 value={voice}
+                 onChange={setVoice}
+                 groups={[
+                   { label: 'American English', options: ['af_heart','af_bella','am_michael'] },
+                   { label: 'British English', options: ['bf_emma'] },
+                   { label: 'Japanese', options: ['jf_alpha'] },
+                   { label: 'Mandarin Chinese', options: ['zf_xiaoyi'] },
+                   { label: 'Spanish', options: ['pf_dora'] },
+                   { label: 'French', options: ['ff_siwis'] },
+                   { label: 'Hindi', options: ['hf_alpha'] },
+                   { label: 'Italian', options: ['if_sara'] },
+                 ]}
+               />
+             </div>
+           </div>
           {/* removed legacy file input row to keep UI minimal */}
           <div className="flex items-center justify-center gap-4">
             <CollapsingIconButton
@@ -218,6 +297,21 @@ export default function Home() {
               />
             )}
           </div>
+          {/* Single inline banner below buttons */}
+          {(error || status) && (
+            <div className="mx-auto w-[min(820px,92vw)] rounded-md border border-white/10 bg-transparent mt-3 px-3 py-2 text-sm flex items-center gap-2">
+              {status?.kind === 'error' || error ? (
+                <AlertTriangle className="w-4 h-4 text-red-300 drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
+              ) : status?.kind === 'ok' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-300 drop-shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
+              ) : (
+                <Loader2 className="w-4 h-4 text-neutral-300 animate-spin drop-shadow-[0_0_6px_rgba(212,212,216,0.4)]" />
+              )}
+              <div className="text-neutral-300">
+                {error || status?.message}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <>

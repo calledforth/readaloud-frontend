@@ -49,7 +49,7 @@ export async function synthesizeChunk(
   paragraph_id: string,
   text: string,
   sample_rate = 24000,
-  options?: { signal?: AbortSignal; timeoutMs?: number; retries?: number },
+  options?: { signal?: AbortSignal; timeoutMs?: number; retries?: number; voice?: string },
 ): Promise<{ audio_base64: string; sample_rate: number; cleaned_text: string; timings: Array<{ word: string; start_ms: number; end_ms: number; char_start: number; char_end: number }> }> {
   const result = await callApi<{
     audio_base64: string;
@@ -58,7 +58,7 @@ export async function synthesizeChunk(
     timings: Array<{ word: string; start_ms: number; end_ms: number; char_start: number; char_end: number }>;
   }>('/api/synthesize-chunk', {
     method: 'POST',
-    body: JSON.stringify({ doc_id, paragraph_id, text, sample_rate }),
+    body: JSON.stringify({ doc_id, paragraph_id, text, sample_rate, voice: options?.voice }),
     signal: options?.signal,
   });
 

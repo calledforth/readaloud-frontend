@@ -50,15 +50,19 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await response.json();
-    
-    if (!result.ok) {
-      throw new Error(`Runpod error: ${result.message || 'Unknown error'}`);
+    // Unwrap possible runsync envelope
+    const payload = (result && typeof result === 'object' && 'output' in result)
+      ? (result as { output: unknown }).output as Record<string, unknown>
+      : (result as Record<string, unknown>);
+
+    if (!payload || (payload as { ok?: unknown }).ok !== true) {
+      throw new Error(`Runpod error: ${(payload as { message?: string })?.message || 'Unknown error'}`);
     }
 
     // Return in the format expected by the frontend
     return NextResponse.json({
-      doc_id: result.doc_id,
-      paragraphs: result.paragraphs,
+      doc_id: (payload as { doc_id: string }).doc_id,
+      paragraphs: (payload as { paragraphs: Array<{ paragraph_id: string; text: string }> }).paragraphs,
     });
   } catch (error) {
     console.error('Prepare document failed:', error);

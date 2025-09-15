@@ -1,8 +1,15 @@
+"use client";
 import React from 'react';
 
 export function HeroLogo() {
+  const [tick, setTick] = React.useState(0);
   return (
-    <div className="select-none pointer-events-none">
+    <div
+      className="select-none cursor-pointer"
+      onMouseEnter={() => setTick((t) => t + 1)}
+      aria-label="ReadAloud logo"
+      role="img"
+    >
       <div className="text-center leading-[0.9]">
         <div className="text-[56px] font-[900] tracking-tight">Read</div>
         <div className="text-[56px] font-[900] tracking-tight">Aloud</div>
@@ -15,6 +22,7 @@ export function HeroLogo() {
           xmlns="http://www.w3.org/2000/svg"
         >
           <path
+            key={tick}
             d="M2 16 C14 8, 22 24, 34 16 S58 8, 70 16 82 24, 94 16 106 8, 118 16 130 24, 142 16 154 8, 166 16 178 24, 190 16 202 8, 214 16"
             stroke="currentColor"
             strokeWidth="2.5"

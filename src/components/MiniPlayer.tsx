@@ -15,6 +15,9 @@ export function MiniPlayer() {
     stopPlayback,
     seekCurrent,
     chunks,
+    cancelAllControllers,
+    clearTimers,
+    currentIndex,
   } = useAppStore();
 
   // Move hooks to the top before any early returns
@@ -27,14 +30,18 @@ export function MiniPlayer() {
   const onReset = () => {
     // Hard pause and clear scheduled nodes
     try { stopPlayback?.(); } catch {}
+    // Cancel inflight network and timers
+    try { cancelAllControllers(); } catch {}
+    try { clearTimers?.(); } catch {}
     // Reset store progression
     try { setPlaying(false); } catch {}
     try { setCurrentIndex(0); } catch {}
     try {
-      const normalized = chunks.map((c) => ({
-        ...c,
-        status: (c.status === 'queued' ? 'queued' : 'ready') as 'queued' | 'ready',
-      }));
+      const normalized = chunks.map((c, idx) => {
+        if (idx < currentIndex) return { ...c, status: 'done' as const };
+        if (idx === currentIndex) return { ...c, status: 'ready' as const };
+        return { ...c, status: (c.status === 'queued' ? 'queued' : 'ready') as 'queued' | 'ready' };
+      });
       setChunks(normalized);
     } catch {}
     // Reset metrics and offset

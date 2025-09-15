@@ -2,7 +2,7 @@
 import React from 'react';
 import { FileText } from 'lucide-react';
 
-export function PdfDropzone({ onFile, file, onClear }: { onFile: (f: File) => void; file?: File | null; onClear?: () => void }) {
+export function PdfDropzone({ onFile, file, onClear, error }: { onFile: (f: File) => void; file?: File | null; onClear?: () => void; error?: boolean }) {
   const [dragOver, setDragOver] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [pages, setPages] = React.useState<number | undefined>(undefined);
@@ -52,7 +52,7 @@ export function PdfDropzone({ onFile, file, onClear }: { onFile: (f: File) => vo
     const size = formatSize(file.size);
     const date = formatDate(file.lastModified);
     return (
-      <div className="group flex items-center justify-between rounded-xl border border-white/15 bg-transparent px-4 py-3 hover:border-white/30 transition">
+      <div className={`group flex items-center justify-between rounded-xl border ${error ? 'border-red-400/60' : 'border-white/15'} bg-transparent px-4 py-3 hover:border-white/30 transition`}>
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-md grid place-items-center border border-red-400/40 bg-red-500/10 text-red-300">
             <FileText className="w-4 h-4" />
@@ -78,7 +78,7 @@ export function PdfDropzone({ onFile, file, onClear }: { onFile: (f: File) => vo
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={onDrop}
-      className={`rounded-xl border border-dashed ${dragOver ? 'border-white/40 bg-white/[0.06]' : 'border-white/15 bg-transparent'} p-8 text-center transition cursor-pointer hover:border-white/30 hover:bg-white/[0.03]`}
+      className={`rounded-xl border border-dashed ${error ? 'border-red-400/60' : dragOver ? 'border-white/40 bg-white/[0.06]' : 'border-white/15 bg-transparent'} p-8 text-center transition cursor-pointer hover:border-white/30 hover:bg-white/[0.03]`}
       onClick={() => inputRef.current?.click()}
       role="button"
       tabIndex={0}

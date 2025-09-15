@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { doc_id, paragraph_id, text, sample_rate = 24000 } = body;
+    const { doc_id, paragraph_id, text, sample_rate = 24000, voice } = body;
 
     if (!doc_id || !paragraph_id || !text) {
       return NextResponse.json(
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       doc_id,
       paragraph_id,
       text,
-      voice: 'af_heart',
+      voice: voice || 'af_heart',
       sample_rate,
       rate: 1.0,
     };
@@ -46,17 +46,21 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await response.json();
-    
-    if (!result.ok) {
-      throw new Error(`Runpod error: ${result.message || 'Unknown error'}`);
+    // Unwrap possible runsync envelope
+    const payload = (result && typeof result === 'object' && 'output' in result)
+      ? (result as { output: unknown }).output as Record<string, unknown>
+      : (result as Record<string, unknown>);
+
+    if (!payload || (payload as { ok?: unknown }).ok !== true) {
+      throw new Error(`Runpod error: ${(payload as { message?: string })?.message || 'Unknown error'}`);
     }
 
     // Return in the format expected by the frontend
     return NextResponse.json({
-      audio_base64: result.audio_base64,
-      sample_rate: result.sample_rate,
-      cleaned_text: result.cleaned_text,
-      timings: result.timings,
+      audio_base64: (payload as { audio_base64: string }).audio_base64,
+      sample_rate: (payload as { sample_rate: number }).sample_rate,
+      cleaned_text: (payload as { cleaned_text: string }).cleaned_text,
+      timings: (payload as { timings: Array<{ word: string; start_ms: number; end_ms: number; char_start: number; char_end: number }> }).timings,
     });
   } catch (error) {
     console.error('Synthesize chunk failed:', error);
