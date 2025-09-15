@@ -20,8 +20,10 @@ async function callApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
 }
 
 export async function health(): Promise<{ ok: true; status: 'ok'; version: string }> {
-  const result = await callApi<{ ok: true; status: 'ok'; version: string }>('/api/health');
-  return result;
+  return callApi('/api/health', {
+    method: 'POST',
+    body: JSON.stringify({ input: { op: 'health' } }),
+  });
 }
 
 type Paragraph = { paragraph_id: string; text: string };
