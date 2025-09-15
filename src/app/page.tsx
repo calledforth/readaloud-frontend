@@ -235,7 +235,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-200">
       {!isProcessing ? (
-        <div className="mx-auto w-[min(820px,92vw)] pt-16 pb-10 space-y-6">
+        <div className="mx-auto w-[min(820px,92vw)] pt-12 md:pt-16 pb-10 space-y-6 px-3 md:px-0">
           <div className="flex items-center justify-center">
             <HeroLogo />
           </div>
@@ -253,7 +253,7 @@ export default function Home() {
             )}
           </div>
            {/* Model and Voice picker */}
-           <div className="mx-auto w-[min(820px,92vw)] flex items-center gap-6 text-sm">
+           <div className="mx-auto w-[min(820px,92vw)] flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-6 text-sm">
              <div className="flex items-center gap-3">
                <label className="text-neutral-400">Model</label>
                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-white/10 bg-transparent text-sm text-white">
@@ -279,7 +279,7 @@ export default function Home() {
              </div>
            </div>
           {/* removed legacy file input row to keep UI minimal */}
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex items-center justify-center gap-3 sm:gap-4">
             <CollapsingIconButton
               onClick={onPrepare}
               disabled={busy}

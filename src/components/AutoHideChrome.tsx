@@ -73,7 +73,18 @@ export function AutoHideChrome({ inactivityMs = 1500 }: { inactivityMs?: number 
     };
   }, [isPlaying, inactivityMs, scheduleHide]);
 
-  return null;
+  // Global helpers for safe-area padding and auto-hide opacity (desktop only)
+  return (
+    <style jsx global>{`
+      @media (hover: hover) and (pointer: fine) {
+        [data-chrome-hidden="true"] .auto-hide-chrome { opacity: 0; transition: opacity 300ms ease; }
+        [data-chrome-hidden="false"] .auto-hide-chrome { opacity: 1; transition: opacity 300ms ease; }
+      }
+      @supports(padding: env(safe-area-inset-bottom)) {
+        .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
+      }
+    `}</style>
+  );
 }
 
 

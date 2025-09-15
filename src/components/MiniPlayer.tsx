@@ -77,7 +77,7 @@ export function MiniPlayer() {
   if (!hasAudio) return null;
 
   return (
-    <div ref={containerRef} className="auto-hide-chrome fixed bottom-16 right-8 z-40 select-none">
+    <div ref={containerRef} className="auto-hide-chrome fixed bottom-20 md:bottom-16 right-4 md:right-8 z-40 select-none">
       <div className="rounded-2xl bg-transparent p-2 flex flex-col items-center gap-3 relative">
         <button
           onClick={onToggle}
