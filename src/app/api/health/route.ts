@@ -19,7 +19,7 @@ export async function POST() {
         'Authorization': `Bearer ${RUNPOD_API_KEY}`,
       },
       body: JSON.stringify({ 
-        input: { op: 'health' } 
+        "input": { "op": "health" } 
       }),
     });
 
@@ -28,12 +28,24 @@ export async function POST() {
     }
 
     const result = await response.json();
-    
-    if (!result.ok) {
-      throw new Error(`Runpod error: ${result.message || 'Unknown error'}`);
+    console.log('Runpod health raw result:', result);
+    // Unwrap runsync envelope if present
+    const payload = (result && typeof result === 'object' && 'output' in result)
+      ? (result as { output: unknown; status?: string }).output as Record<string, unknown>
+      : (result as Record<string, unknown>);
+
+    // If the upstream signals a transient async status (for /run), surface it to the client
+    const status = (result as { status?: string }).status;
+    if (status && status !== 'COMPLETED' && !('ok' in payload)) {
+      return NextResponse.json({ ok: false, status }, { status: 200 });
     }
 
-    return NextResponse.json(result);
+    if (!payload || (payload as { ok?: unknown }).ok !== true) {
+      throw new Error(`Runpod error: ${(payload as { message?: string })?.message || 'Unknown error'}`);
+    }
+
+    // Return the flat payload expected by the client
+    return NextResponse.json(payload);
   } catch (error) {
     console.error('Health check failed:', error);
     return NextResponse.json(

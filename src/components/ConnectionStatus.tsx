@@ -16,9 +16,14 @@ export function ConnectionStatus() {
         await new Promise((r) => setTimeout(r, 400));
         setStatus('checking_runpod');
         await new Promise((r) => setTimeout(r, 600));
-        const resp = await health();
+        const resp = await health().catch((e) => { throw e; });
         if (!alive) return;
-        setVersion(resp.version);
+        // If API surfaces transient async status (when using /run), show as checking
+        if ((resp as unknown as { ok?: boolean }).ok !== true) {
+          setStatus('checking_runpod');
+          return;
+        }
+        setVersion((resp as { version: string }).version);
         setStatus('connected');
       } catch {
         if (!alive) return;
@@ -26,12 +31,13 @@ export function ConnectionStatus() {
       }
     };
     void run();
-    const t = setInterval(run, 30000);
+    // Long cadence: every 15 minutes
+    const t = setInterval(run, 15 * 60 * 1000);
     return () => { alive = false; clearInterval(t); };
   }, []);
 
   return (
-    <div className="inline-flex items-center gap-2 text-xs text-neutral-400">
+    <div className="inline-flex items-center gap-2 text-sm text-neutral-300">
       <Flower state={status} />
       <span className="tabular-nums">
         {status === 'checking' && 'Checking…'}
@@ -51,8 +57,8 @@ function Flower({ state }: { state: Status }) {
                   state === 'checking_runpod' ? 'animate-[spin_2.5s_linear_infinite]' :
                   state === 'checking' ? 'animate-[spin_2.5s_linear_infinite]' : '';
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" className={animate} aria-hidden>
-      <g fill={color} fillOpacity="0.9">
+    <svg width="16" height="16" viewBox="0 0 24 24" className={animate} aria-hidden>
+      <g fill={color} fillOpacity="1">
         <circle cx="12" cy="6" r="2" />
         <circle cx="12" cy="18" r="2" />
         <circle cx="6" cy="12" r="2" />
@@ -61,7 +67,7 @@ function Flower({ state }: { state: Status }) {
         <circle cx="7.5" cy="16.5" r="1.6" />
         <circle cx="7.5" cy="7.5" r="1.6" />
         <circle cx="16.5" cy="16.5" r="1.6" />
-        <circle cx="12" cy="12" r="1.4" fill="#065F46" />
+        <circle cx="12" cy="12" r="1.6" fill="#065F46" />
       </g>
     </svg>
   );
