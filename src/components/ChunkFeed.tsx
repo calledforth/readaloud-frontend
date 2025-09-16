@@ -16,8 +16,12 @@ export function ChunkFeed({
   const { chunks, currentIndex, updateChunk, isPlaying, speed, setStopPlayback, cancelled, setPlaybackMetrics, setSeekCurrent } = useAppStore();
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const durationRef = useRef<number>(1);
+  const startTimeRef = useRef<number>(0); // AudioContext.currentTime when (re)started
+  const durationRef = useRef<number>(1); // Scaled duration in seconds (divided by rate)
+  const startOffsetSecRef = useRef<number>(0); // Unscaled seconds position at start (0..buffer.duration)
+  const playbackRateRef = useRef<number>(1);
+  const rafIdRef = useRef<number | null>(null);
+  const opTokenRef = useRef<number>(0); // increments on rebuilds to cancel async/rAF
   const [progress, setProgress] = useState(0);
   const [isDecoding, setDecoding] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -37,10 +41,10 @@ export function ChunkFeed({
     const c = chunks[currentIndex];
     if (!cur || !c) return;
     try {
-      const rateNow = Math.max(0.25, Math.min(3.0, speed));
-      const elapsed = Math.max(0, audioContext.currentTime - startTimeRef.current);
-      let offsetSec = elapsed * rateNow;
-      const maxSec = (cur.buffer ? cur.buffer.duration : durationRef.current * rateNow);
+      const rateNow = playbackRateRef.current = Math.max(0.25, Math.min(3.0, speed));
+      const elapsedCtx = Math.max(0, audioContext.currentTime - startTimeRef.current);
+      let offsetSec = elapsedCtx * rateNow + startOffsetSecRef.current; // unscaled seconds into buffer
+      const maxSec = (cur.buffer ? cur.buffer.duration : (durationRef.current * rateNow));
       offsetSec = Math.max(0, Math.min(maxSec, offsetSec));
       if (snapToWord && c.timings && c.timings.length > 0) {
         const curMs = offsetSec * 1000;
@@ -59,6 +63,10 @@ export function ChunkFeed({
     gainRef.current = null;
     try { nextPrebuiltRef.current?.src.stop(); } catch {}
     nextPrebuiltRef.current = null;
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
     try { updateChunk(c.paragraph_id, { status: 'paused' }); } catch {}
   };
   
@@ -94,6 +102,9 @@ export function ChunkFeed({
       return;
     }
     void (async () => {
+      // increment operation token to invalidate prior async/rAF
+      opTokenRef.current += 1;
+      const token = opTokenRef.current;
       if (cancelled) return;
       const c = chunks[currentIndex];
       if (!c || !c.audioBase64) return;
@@ -103,23 +114,28 @@ export function ChunkFeed({
         if (audioContext.state === 'suspended') {
           try { await audioContext.resume(); } catch {}
         }
-        const buffer = bufferCacheRef.current.get(c.paragraph_id) || await decodeWavBase64(audioContext, c.audioBase64);
+        const cached = bufferCacheRef.current.get(c.paragraph_id);
+        const buffer = cached || await decodeWavBase64(audioContext, c.audioBase64);
+        if (token !== opTokenRef.current) return; // aborted
         bufferCacheRef.current.set(c.paragraph_id, buffer);
         const src = audioContext.createBufferSource();
         src.buffer = buffer;
         // Keep absolute time position when speed changes: compute remaining and reschedule
-        const rate = Math.max(0.25, Math.min(3.0, speed));
+        const rate = playbackRateRef.current = Math.max(0.25, Math.min(3.0, speed));
         src.playbackRate.value = rate;
         const gain = audioContext.createGain();
         gain.gain.value = 1;
         src.connect(gain).connect(audioContext.destination);
+        const indexAtStart = currentIndex;
         src.onended = () => {
+          if (token !== opTokenRef.current) return; // stale
           updateChunk(c.paragraph_id, { status: 'done' });
           // Determine if this was the final chunk; if so, stop playing
           try {
             const s = useAppStore.getState();
             const atEnd = (s.currentIndex + 1) >= s.chunks.length;
-            onNext();
+            // guard against external index changes
+            if (s.currentIndex === indexAtStart) onNext();
             if (atEnd) {
               try { s.setPlaying(false); } catch {}
             }
@@ -134,7 +150,8 @@ export function ChunkFeed({
         const startRate = Math.max(0.25, Math.min(3.0, src.playbackRate.value));
         const resumeAt = Math.max(0, Math.min(buffer.duration, pausedOffsetRef.current || 0));
         pausedOffsetRef.current = 0;
-        startTimeRef.current = audioContext.currentTime - (resumeAt / Math.max(0.01, startRate));
+        startTimeRef.current = audioContext.currentTime;
+        startOffsetSecRef.current = resumeAt; // unscaled seconds
         durationRef.current = buffer.duration / Math.max(0.01, startRate);
         setPlaybackMetrics(resumeAt / Math.max(0.01, startRate), durationRef.current);
         setSeekCurrent(() => (offsetSec: number) => {
@@ -146,9 +163,16 @@ export function ChunkFeed({
             // Only update metrics and paused offset; do not rebuild or start audio
             const durScaled = buffer.duration / Math.max(0.01, rate);
             setPlaybackMetrics(clamped / Math.max(0.01, rate), durScaled);
+            try { nextPrebuiltRef.current?.src.stop(); } catch {}
+            nextPrebuiltRef.current = null;
             return;
           }
+          // invalidate ongoing work and cancel rAF
+          opTokenRef.current += 1;
+          if (rafIdRef.current !== null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
           try { sourceRef.current?.stop(); } catch {}
+          try { nextPrebuiltRef.current?.src.stop(); } catch {}
+          nextPrebuiltRef.current = null;
           const newsrc = audioContext.createBufferSource();
           newsrc.buffer = buffer;
           newsrc.playbackRate.value = rate;
@@ -157,7 +181,9 @@ export function ChunkFeed({
           newsrc.connect(gain2).connect(audioContext.destination);
           sourceRef.current = newsrc;
           gainRef.current = gain2;
-          startTimeRef.current = audioContext.currentTime - clamped / Math.max(0.01, rate);
+          playbackRateRef.current = rate;
+          startTimeRef.current = audioContext.currentTime;
+          startOffsetSecRef.current = clamped;
           durationRef.current = buffer.duration / Math.max(0.01, rate);
           const ramp = 0.012;
           const now2 = audioContext.currentTime;
@@ -178,6 +204,7 @@ export function ChunkFeed({
         const n = chunks[nextIdx];
         if (n && n.audioBase64) {
           const nbuf = bufferCacheRef.current.get(n.paragraph_id) || await decodeWavBase64(audioContext, n.audioBase64);
+          if (token !== opTokenRef.current) return; // aborted
           bufferCacheRef.current.set(n.paragraph_id, nbuf);
           const nsrc = audioContext.createBufferSource();
           nsrc.buffer = nbuf;
@@ -199,14 +226,23 @@ export function ChunkFeed({
         }
         // drive progress smoothly
         const tick = () => {
+          if (token !== opTokenRef.current) return; // aborted
           if (!sourceRef.current) return;
-          const elapsed = audioContext.currentTime - startTimeRef.current;
-          const p = Math.min(1, Math.max(0, elapsed / durationRef.current));
+          const nowT = audioContext.currentTime;
+          const rateNow = playbackRateRef.current || 1;
+          const elapsedUnscaled = Math.max(0, (nowT - startTimeRef.current) * rateNow + startOffsetSecRef.current);
+          const totalUnscaled = sourceRef.current.buffer ? sourceRef.current.buffer.duration : Math.max(1e-6, durationRef.current * rateNow);
+          const p = Math.min(1, Math.max(0, elapsedUnscaled / totalUnscaled));
           setProgress(p);
-          setPlaybackMetrics(Math.max(0, elapsed), durationRef.current);
-          if (p < 1) requestAnimationFrame(tick);
+          const elapsedScaled = elapsedUnscaled / Math.max(0.01, rateNow);
+          setPlaybackMetrics(Math.min(durationRef.current, elapsedScaled), durationRef.current);
+          if (p < 1) {
+            rafIdRef.current = requestAnimationFrame(tick);
+          } else {
+            rafIdRef.current = null;
+          }
         };
-        requestAnimationFrame(tick);
+        rafIdRef.current = requestAnimationFrame(tick);
       } finally {
         setDecoding(false);
       }
@@ -219,8 +255,15 @@ export function ChunkFeed({
     const rate = Math.max(0.25, Math.min(3.0, speed));
     const src = sourceRef.current;
     if (src) {
+      // keep continuous position when rate changes
+      const oldRate = playbackRateRef.current || 1;
+      const nowT = audioContext.currentTime;
+      const elapsedUnscaled = Math.max(0, (nowT - startTimeRef.current) * oldRate + startOffsetSecRef.current);
+      playbackRateRef.current = rate;
+      startTimeRef.current = nowT;
+      startOffsetSecRef.current = elapsedUnscaled;
       try { src.playbackRate.value = rate; } catch {}
-      const dur = src.buffer ? src.buffer.duration : durationRef.current;
+      const dur = src.buffer ? src.buffer.duration : (durationRef.current * oldRate);
       durationRef.current = dur / Math.max(0.01, rate);
     }
     // Rebuild next prebuilt source with updated rate and schedule time
