@@ -18,6 +18,7 @@ type State = {
   controllers: AbortController[];
   currentElapsedSec: number;
   currentDurationSec: number;
+  autoplayEnabled: boolean;
   setDocId: (id: string) => void;
   setChunks: (c: Chunk[]) => void;
   updateChunk: (pid: string, data: Partial<Chunk>) => void;
@@ -28,6 +29,7 @@ type State = {
   addController: (c: AbortController) => void;
   cancelAllControllers: () => void;
   setPlaybackMetrics: (elapsed: number, duration: number) => void;
+  setAutoplayEnabled: (b: boolean) => void;
 };
 
 export const useAppStore = create<State>((set) => ({
@@ -39,6 +41,7 @@ export const useAppStore = create<State>((set) => ({
   controllers: [],
   currentElapsedSec: 0,
   currentDurationSec: 0,
+  autoplayEnabled: true,
   setDocId: (docId) => set({ docId }),
   setChunks: (chunks) => set({ chunks }),
   updateChunk: (paragraph_id, data) =>
@@ -57,6 +60,7 @@ export const useAppStore = create<State>((set) => ({
     return { controllers: [] };
   }),
   setPlaybackMetrics: (elapsed, duration) => set({ currentElapsedSec: elapsed, currentDurationSec: duration }),
+  setAutoplayEnabled: (autoplayEnabled) => set({ autoplayEnabled }),
 }));
 
 

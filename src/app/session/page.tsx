@@ -14,7 +14,7 @@ import { synthesizeChunk } from "../../lib/provider";
 
 export default function SessionPage() {
   const router = useRouter();
-  const { chunks, currentIndex, addController, isPlaying } = useAppStore();
+  const { chunks, currentIndex, addController, isPlaying, autoplayEnabled } = useAppStore();
 
   React.useEffect(() => {
     // If no session exists, go home
@@ -29,17 +29,17 @@ export default function SessionPage() {
     return () => { AudioController.setPlaybackAllowed(false); };
   }, []);
 
-  // Autoplay when current is ready/paused and nothing is playing
+  // Autoplay when current is ready/paused and nothing is playing, only if autoplayEnabled
   React.useEffect(() => {
     const s = useAppStore.getState();
     const c = s.chunks[s.currentIndex];
-    if (c && (c.status === 'ready' || c.status === 'paused') && c.audioBase64 && s.isPlaying === false) {
+    if (autoplayEnabled && c && (c.status === 'ready' || c.status === 'paused') && c.audioBase64 && s.isPlaying === false) {
       void (async () => {
         try { AudioController.init(); } catch {}
         await AudioController.play(s.currentIndex);
       })();
     }
-  }, [currentIndex, chunks, isPlaying]);
+  }, [currentIndex, chunks, isPlaying, autoplayEnabled]);
 
   // Prefetch next queued chunk when advancing
   React.useEffect(() => {
@@ -80,7 +80,15 @@ export default function SessionPage() {
       <div className="mx-auto w-[min(920px,95vw)] py-6 space-y-6">
         <TruncatedPreview text={chunks.map(c => c.text).join('\n\n')} />
         <ChunkFeed headless />
-        <ReaderView onTogglePlay={() => useAppStore.getState().setPlaying(!useAppStore.getState().isPlaying)} />
+        <ReaderView onTogglePlay={() => {
+          const s = useAppStore.getState();
+          if (s.isPlaying) {
+            AudioController.pause();
+          } else {
+            try { AudioController.init(); } catch {}
+            void AudioController.play();
+          }
+        }} />
         <MiniPlayer />
       </div>
     </div>

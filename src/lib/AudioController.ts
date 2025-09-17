@@ -158,6 +158,7 @@ class AudioControllerImpl {
 
   pause(): void {
     const s = useAppStore.getState();
+    s.setAutoplayEnabled(false);
     const cur = s.chunks[s.currentIndex];
     const ctx = this.audioContext;
     if (!ctx || !this.currentSource || !cur) {
