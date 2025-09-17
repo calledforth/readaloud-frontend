@@ -2,25 +2,22 @@
 import React, { useRef, useState } from "react";
 import { useAppStore } from "../state/store";
 import { prepareDocument, synthesizeChunk } from "../lib/provider";
-import { ChunkFeed } from "../components/ChunkFeed";
-import { ReaderView } from "../components/ReaderView";
 import { perfMark, perfMeasure, initPerfObserver } from "../lib/perf";
 import { HeroLogo } from "../components/HeroLogo";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { CollapsingIconButton } from "../components/CollapsingIconButton";
-import { TopBar } from "../components/TopBar";
 import { TruncatedPreview } from "../components/TruncatedPreview";
 import { SegmentedSelector, type Mode } from "../components/SegmentedSelector";
 import { PdfDropzone } from "../components/PdfDropzone";
 import { AutoTextarea } from "../components/AutoTextarea";
-import { MiniPlayer } from "../components/MiniPlayer";
-import { AutoHideChrome } from "../components/AutoHideChrome";
-import { Settings, Play, Sparkles, ChevronDown, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { Play, Sparkles, ChevronDown, AlertTriangle, CheckCircle2, Loader2, PlayCircle } from "lucide-react";
 import { VoiceSelect } from "../components/VoiceSelect";
+import { AudioController } from "../lib/AudioController";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const { setDocId, setChunks, chunks, setCurrentIndex, currentIndex, setPlaying, addController, setClearTimers } = useAppStore();
+  const { setDocId, setChunks, chunks, setCurrentIndex, currentIndex, setPlaying, addController } = useAppStore();
   const [busy, setBusy] = useState(false);
   const [textInput, setTextInput] = useState<string>("This is a demo paragraph.\n\nThis is the next paragraph to synthesize.");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -33,6 +30,7 @@ export default function Home() {
   const [status, setStatus] = useState<UiStatus>(null);
   const [textErrorOnce, setTextErrorOnce] = useState(false);
   const [pdfErrorOnce, setPdfErrorOnce] = useState(false);
+  const router = useRouter();
 
   // Initialize perf observer once
   React.useEffect(() => {
@@ -69,17 +67,8 @@ export default function Home() {
     }
     setBusy(true);
     try {
-      // Create AudioContext on user gesture to satisfy autoplay policies
-      if (!audioContextRef.current) {
-        type Ctor = typeof AudioContext;
-        const g = globalThis as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
-        const AC = (g.AudioContext ?? g.webkitAudioContext)!;
-        audioContextRef.current = new AC();
-      }
-      const ctx = audioContextRef.current!;
-      try {
-        await ctx.resume();
-      } catch {}
+      // Start a fresh controller session (single active session)
+      try { AudioController.load(); } catch {}
       // Starting a new session: clear cancel flag
       useAppStore.getState().setCancelled(false);
       let pdfBase64: string | undefined;
@@ -101,10 +90,10 @@ export default function Home() {
         paragraphs.map((p) => ({ paragraph_id: p.paragraph_id, text: p.text, status: "queued" }))
       );
       setCurrentIndex(0);
-      // Prefetch using direct store access to avoid stale state closure
+      // Synthesize first chunk; then navigate to /session for playback
       await prefetchByIndex(0);
-      await prefetchByIndex(1);
-      setPlaying(true);
+      // navigate to /session
+      router.push('/session');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error occurred while preparing the document.';
       setError(msg);
@@ -150,33 +139,10 @@ export default function Home() {
     }
   };
 
-  const onNext = async () => {
-    const next = currentIndex + 1;
-    const s = useAppStore.getState();
-    const atEnd = next >= s.chunks.length;
-    if (atEnd) {
-      try { s.setPlaying(false); } catch {}
-      return;
-    }
-    setCurrentIndex(next);
-    const willBeEnd = next + 1 >= s.chunks.length;
-    await prefetchByIndex(next);
-    if (!willBeEnd) await prefetchByIndex(next + 1);
-  };
-
-  // Local-only functional demo (no backend). Simulates staggered chunk arrivals.
   const onStartDemo = async () => {
     if (!isLocalDemo || busy) return;
     setBusy(true);
     try {
-      if (!audioContextRef.current) {
-        type Ctor = typeof AudioContext;
-        const g = globalThis as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
-        const AC = (g.AudioContext ?? g.webkitAudioContext)!;
-        audioContextRef.current = new AC();
-      }
-      const ctx = audioContextRef.current!;
-      try { await ctx.resume(); } catch {}
       useAppStore.getState().setCancelled(false);
 
       const raw = textInput && textInput.trim().length > 0 ? textInput : 'Demo paragraph one.\n\nDemo paragraph two.\n\nDemo paragraph three.';
@@ -186,31 +152,13 @@ export default function Home() {
       setChunks(demoParas.map((t, i) => ({ paragraph_id: `p${(i + 1).toString().padStart(4, '0')}`, text: t, status: 'queued' })));
       setCurrentIndex(0);
 
-      // Streaming timers we can cancel on Stop
-      const timers: number[] = [];
-      const t1 = window.setTimeout(() => { void prefetchByIndex(0); }, 200);
-      const t2 = window.setTimeout(() => { void prefetchByIndex(1); }, 1200);
-      timers.push(t1, t2);
-      let offset = 2;
-      const interval = window.setInterval(() => {
-        const idx = offset++;
-        if (idx >= demoParas.length) {
-          window.clearInterval(interval);
-          return;
-        }
-        void prefetchByIndex(idx);
-      }, 5000);
-      // register cleanup for Stop
-      setClearTimers(() => () => {
-        for (const id of timers) window.clearTimeout(id);
-        window.clearInterval(interval);
-      });
-      setPlaying(true);
+      // Kick off first synthesis only; playback happens in /session
+      void prefetchByIndex(0);
+      router.push('/session');
     } finally {
       setBusy(false);
     }
   };
-
 
   function fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -229,116 +177,105 @@ export default function Home() {
     });
   }
 
-  // removed inline component wrappers to avoid remounting on each render (which caused input blur)
-
-  const isProcessing = audioContextRef.current && chunks.some((c) => c.status !== 'queued');
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-200">
-      {!isProcessing ? (
-        <div className="mx-auto w-[min(820px,92vw)] pt-12 md:pt-16 pb-10 space-y-6 px-3 md:px-0">
-          <div className="flex items-center justify-center">
-            <HeroLogo />
-          </div>
-          <div className="flex items-center justify-center">
-            <ConnectionStatus />
-          </div>
-          <div className="flex items-center justify-center">
-            <SegmentedSelector value={mode} onChange={setMode} />
-          </div>
-          <div className="mx-auto w-[min(820px,92vw)]">
-            {mode === 'text' ? (
-              <AutoTextarea value={textInput} onChange={setTextInput} placeholder="Type or paste text here" error={textErrorOnce} />
-            ) : (
-              <PdfDropzone onFile={(f) => setPdfFile(f)} file={pdfFile} onClear={() => setPdfFile(null)} error={pdfErrorOnce} />
-            )}
-          </div>
-           {/* Model and Voice picker */}
-           <div className="mx-auto w-[min(820px,92vw)] flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-6 text-sm">
-             <div className="flex items-center gap-3">
-               <label className="text-neutral-400">Model</label>
-               <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-white/10 bg-transparent text-sm text-white">
-                 <span className="tabular-nums">Kokoro</span>
-               </div>
-             </div>
-             <div className="flex items-center gap-3">
-               <label className="text-neutral-400">Voice</label>
-               <VoiceSelect
-                 value={voice}
-                 onChange={setVoice}
-                 groups={[
-                   { label: 'American English', options: ['af_heart','af_bella','am_michael'] },
-                   { label: 'British English', options: ['bf_emma'] },
-                   { label: 'Japanese', options: ['jf_alpha'] },
-                   { label: 'Mandarin Chinese', options: ['zf_xiaoyi'] },
-                   { label: 'Spanish', options: ['pf_dora'] },
-                   { label: 'French', options: ['ff_siwis'] },
-                   { label: 'Hindi', options: ['hf_alpha'] },
-                   { label: 'Italian', options: ['if_sara'] },
-                 ]}
-               />
-             </div>
-           </div>
-          {/* removed legacy file input row to keep UI minimal */}
-          <div className="flex items-center justify-center gap-3 sm:gap-4">
-            <CollapsingIconButton
-              onClick={onPrepare}
-              disabled={busy}
-              label="Start processing"
-              className="text-emerald-400"
-              icon={<Play className="w-5 h-5" />}
-            />
-            {isLocalDemo && (
-              <CollapsingIconButton
-                onClick={onStartDemo}
-                disabled={busy}
-                label="Demo"
-                icon={<Sparkles className="w-5 h-5" />}
-                className="text-sky-400"
-              />
-            )}
-          </div>
-          {/* Single inline banner below buttons */}
-          {(error || status) && (
-            <div className="mx-auto w-[min(820px,92vw)] rounded-md border border-white/10 bg-transparent mt-3 px-3 py-2 text-sm flex items-center gap-2">
-              {status?.kind === 'error' || error ? (
-                <AlertTriangle className="w-4 h-4 text-red-300 drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
-              ) : status?.kind === 'ok' ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-300 drop-shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
-              ) : (
-                <Loader2 className="w-4 h-4 text-neutral-300 animate-spin drop-shadow-[0_0_6px_rgba(212,212,216,0.4)]" />
-              )}
-              <div className="text-neutral-300">
-                {error || status?.message}
-              </div>
-            </div>
+      <div className="mx-auto w-[min(820px,92vw)] pt-12 md:pt-16 pb-10 space-y-6 px-3 md:px-0">
+        <div className="flex items-center justify-center">
+          <HeroLogo />
+        </div>
+        <div className="flex items-center justify-center">
+          <ConnectionStatus />
+        </div>
+        <div className="flex items-center justify-center">
+          <SegmentedSelector value={mode} onChange={setMode} />
+        </div>
+        <div className="mx-auto w-[min(820px,92vw)]">
+          {mode === 'text' ? (
+            <AutoTextarea value={textInput} onChange={setTextInput} placeholder="Type or paste text here" error={textErrorOnce} />
+          ) : (
+            <PdfDropzone onFile={(f) => setPdfFile(f)} file={pdfFile} onClear={() => setPdfFile(null)} error={pdfErrorOnce} />
           )}
         </div>
-      ) : (
-        <>
-          <AutoHideChrome inactivityMs={1500} />
-          <TopBar
-            onHome={() => {
-              // Return to landing
-              try { useAppStore.getState().setPlaying(false); } catch {}
-              try { useAppStore.getState().cancelAllControllers(); } catch {}
-              try { useAppStore.getState().setChunks([]); } catch {}
-              try { setPdfFile(null); } catch {}
-            }}
-            right={
-              <button className="p-2 rounded-full" aria-label="Settings" style={{ marginRight: 0 }}>
-                <Settings className="w-4 h-4 text-white" />
-              </button>
-            }
+         {/* Model and Voice picker */}
+         <div className="mx-auto w-[min(820px,92vw)] flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-6 text-sm">
+           <div className="flex items-center gap-3">
+             <label className="text-neutral-400">Model</label>
+             <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-white/10 bg-transparent text-sm text-white">
+               <span className="tabular-nums">Kokoro</span>
+             </div>
+           </div>
+           <div className="flex items-center gap-3">
+             <label className="text-neutral-400">Voice</label>
+             <VoiceSelect
+               value={voice}
+               onChange={setVoice}
+               groups={[
+                 { label: 'American English', options: ['af_heart','af_bella','am_michael'] },
+                 { label: 'British English', options: ['bf_emma'] },
+                 { label: 'Japanese', options: ['jf_alpha'] },
+                 { label: 'Mandarin Chinese', options: ['zf_xiaoyi'] },
+                 { label: 'Spanish', options: ['pf_dora'] },
+                 { label: 'French', options: ['ff_siwis'] },
+                 { label: 'Hindi', options: ['hf_alpha'] },
+                 { label: 'Italian', options: ['if_sara'] },
+               ]}
+             />
+           </div>
+         </div>
+        {/* removed legacy file input row to keep UI minimal */}
+        <div className="flex items-center justify-center gap-3 sm:gap-4">
+          <CollapsingIconButton
+            onClick={onPrepare}
+            disabled={busy}
+            label="Start processing"
+            className="text-emerald-400"
+            icon={<Play className="w-5 h-5" />}
           />
-          <div className="pt-16" />
-          <div className="mx-auto w-[min(920px,95vw)] py-6 space-y-6">
-            <TruncatedPreview text={textInput} />
-            <ChunkFeed headless audioContext={audioContextRef.current as AudioContext} onNext={onNext} />
-            <ReaderView onTogglePlay={() => useAppStore.getState().setPlaying(!useAppStore.getState().isPlaying)} />
-            <MiniPlayer />
+          {isLocalDemo && (
+            <CollapsingIconButton
+              onClick={onStartDemo}
+              disabled={busy}
+              label="Demo"
+              icon={<Sparkles className="w-5 h-5" />}
+              className="text-sky-400"
+            />
+          )}
+        </div>
+        {/* Session card */}
+        {chunks.length > 0 && chunks.some(c => c.status !== 'done') && (
+          <div className="mx-auto w-[min(820px,92vw)] mt-4">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-transparent px-3 py-2">
+              <div className="flex items-center gap-3 text-sm text-neutral-300">
+                <PlayCircle className="w-4 h-4 text-white" />
+                <span>Active session</span>
+                <span className="text-neutral-500">{`${chunks.filter(c=>c.status==='done').length}/${chunks.length}`}</span>
+                {(useAppStore.getState().controllers.length > 0 || chunks.some(c => c.status === 'queued' || c.status === 'synth')) && (
+                  <span className="relative inline-flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-300"></span>
+                  </span>
+                )}
+              </div>
+              <Link href="/session" className="px-3 py-1.5 rounded-md border border-white/10 text-white hover:bg-white/5 text-sm">Resume</Link>
+            </div>
           </div>
-        </>
-      )}
+        )}
+        {/* Single inline banner below buttons */}
+        {(error || status) && (
+          <div className="mx-auto w-[min(820px,92vw)] rounded-md border border-white/10 bg-transparent mt-3 px-3 py-2 text-sm flex items-center gap-2">
+            {status?.kind === 'error' || error ? (
+              <AlertTriangle className="w-4 h-4 text-red-300 drop-shadow-[0_0_6px_rgba(239,68,68,0.6)] animate-pulse" />
+            ) : status?.kind === 'ok' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-300 drop-shadow-[0_0_6px_rgba(16,185,129,0.6)] animate-pulse" />
+            ) : (
+              <Loader2 className="w-4 h-4 text-cyan-300 animate-spin drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+            )}
+            <div className="text-neutral-300">
+              {error || status?.message}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

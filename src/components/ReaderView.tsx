@@ -30,7 +30,7 @@ export function ReaderView({
           const isPast = idx < currentIndex;
           return (
             <div key={c.paragraph_id} data-current={isCurrent ? 'true' : undefined} className={`text-center transition-all ${isCurrent ? 'opacity-100' : isPast ? 'opacity-100' : 'opacity-60'}`}>
-              <p className={`mx-auto max-w-3xl leading-9 tracking-[0.02em] ${isCurrent || isPast ? 'text-neutral-100 text-xl md:text-2xl' : 'text-neutral-400 text-lg md:text-xl'}`}>
+              <p className={`mx-auto max-w-3xl leading-9 tracking-[0.02em] ${isCurrent || isPast ? 'text-neutral-100 text-xl md:text-2xl shimmer-text' : 'text-neutral-400 text-lg md:text-xl'}`}>
                 {c.timings && isCurrent
                   ? c.timings.map((w, i) => {
                       const cur = currentElapsedSec * 1000;
@@ -67,6 +67,10 @@ export function ReaderView({
         /* Subtle wave: opacity shimmer only, no vertical movement to avoid layout jump */
         @keyframes charwave { 0% { opacity: 0.85; } 50% { opacity: 1.0; } 100% { opacity: 0.95; } }
         .wave-letter { animation: charwave 420ms ease-in-out both; will-change: opacity; }
+        
+        /* Text shimmer effect for the entire paragraph */
+        @keyframes textshimmer { 0% { opacity: 0.9; } 50% { opacity: 1.0; } 100% { opacity: 0.9; } }
+        .shimmer-text { animation: textshimmer 2s ease-in-out infinite; }
       `}</style>
     </div>
   );

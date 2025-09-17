@@ -1,10 +1,11 @@
 "use client";
 import React from 'react';
-import { Play, Pause, RotateCcw } from 'lucide-react';
+import { Play, Pause, RotateCcw, XOctagon } from 'lucide-react';
 import { useAppStore } from '../state/store';
+import { AudioController } from '../lib/AudioController';
 
 export function MiniPlayer() {
-  const {
+  const { 
     isPlaying,
     setPlaying,
     setCurrentIndex,
@@ -12,11 +13,8 @@ export function MiniPlayer() {
     setPlaybackMetrics,
     speed,
     setSpeed,
-    stopPlayback,
-    seekCurrent,
     chunks,
     cancelAllControllers,
-    clearTimers,
     currentIndex,
   } = useAppStore();
 
@@ -25,14 +23,22 @@ export function MiniPlayer() {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
 
   const hasAudio = chunks.some((c) => c.status !== 'queued');
+  const current = chunks[currentIndex];
+  const canPlay = !!current && (current.status === 'ready' || current.status === 'paused') && !!current.audioBase64;
 
-  const onToggle = () => setPlaying(!isPlaying);
+  const onToggle = async () => {
+    try { AudioController.init(); } catch {}
+    if (!isPlaying) {
+      await AudioController.play();
+    } else {
+      AudioController.pause();
+    }
+  };
   const onReset = () => {
-    // Hard pause and clear scheduled nodes
-    try { stopPlayback?.(); } catch {}
+    // Hard pause/stop controller
+    try { AudioController.stop(); } catch {}
     // Cancel inflight network and timers
     try { cancelAllControllers(); } catch {}
-    try { clearTimers?.(); } catch {}
     // Reset store progression
     try { setPlaying(false); } catch {}
     try { setCurrentIndex(0); } catch {}
@@ -46,8 +52,6 @@ export function MiniPlayer() {
     } catch {}
     // Reset metrics and offset
     try { setPlaybackMetrics(0, 0); } catch {}
-    // Move paused offset to 0 without starting audio
-    try { seekCurrent?.(0); } catch {}
   };
 
   const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
@@ -81,7 +85,8 @@ export function MiniPlayer() {
       <div className="rounded-2xl bg-transparent p-2 flex flex-col items-center gap-3 relative">
         <button
           onClick={onToggle}
-          className={`w-10 h-10 rounded-full grid place-items-center text-white hover:opacity-90 transition-opacity leading-none`}
+          disabled={!canPlay && !isPlaying}
+          className={`w-10 h-10 rounded-full grid place-items-center ${(!canPlay && !isPlaying) ? 'text-white/40' : 'text-white'} hover:opacity-90 transition-opacity leading-none`}
           aria-label={isPlaying ? 'Pause' : 'Play'}
           title={isPlaying ? 'Pause' : 'Play'}
         >
@@ -96,11 +101,29 @@ export function MiniPlayer() {
 
         <button
           onClick={onReset}
-          className="w-10 h-10 rounded-full grid place-items-center text-red-400 hover:text-red-300 leading-none"
+          className="w-10 h-10 rounded-full grid place-items-center text-yellow-300 hover:text-yellow-200 leading-none"
           aria-label="Reset to start"
           title="Reset to start of paragraph"
         >
           <RotateCcw className="w-4 h-4" />
+        </button>
+
+        <div className="h-px w-8 bg-white/15" />
+
+        <button
+          onClick={() => {
+            const hasPending = useAppStore.getState().controllers.length > 0 || useAppStore.getState().chunks.some(c => c.status === 'queued' || c.status === 'synth');
+            if (!hasPending) return;
+            const ok = window.confirm('Stop all pending synthesis requests?');
+            if (ok) {
+              try { cancelAllControllers(); } catch {}
+            }
+          }}
+          className="w-10 h-10 rounded-full grid place-items-center text-red-400 hover:text-red-300 leading-none"
+          aria-label="Stop pending synthesis"
+          title="Stop pending synthesis"
+        >
+          <XOctagon className="w-4 h-4" />
         </button>
 
         <div className="h-px w-8 bg-white/15" />
@@ -120,7 +143,7 @@ export function MiniPlayer() {
                 {speeds.map((s) => (
                   <button
                     key={s}
-                    onClick={() => { setSpeed(s); setOpenSpeed(false); }}
+                    onClick={async () => { await AudioController.setSpeed(s); setOpenSpeed(false); }}
                     className={`px-2 py-1 text-[11px] rounded-md ${speed === s ? 'bg-white text-black' : 'text-neutral-300 hover:bg-white/10'}`}
                   >
                     {s}x
