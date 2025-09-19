@@ -10,14 +10,15 @@ import { CollapsingIconButton } from "../components/CollapsingIconButton";
 import { SegmentedSelector, type Mode } from "../components/SegmentedSelector";
 import { PdfDropzone } from "../components/PdfDropzone";
 import { AutoTextarea } from "../components/AutoTextarea";
-import { Play, Sparkles, AlertTriangle, CheckCircle2, Loader2, PlayCircle } from "lucide-react";
+import { Play, Sparkles, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { VoiceSelect } from "../components/VoiceSelect";
 import { AudioController } from "../lib/AudioController";
-import Link from "next/link";
+import { SessionHistory } from "../components/SessionHistory";
+import { useSessionHistory } from "../lib/useSessionHistory";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const { setDocId, setChunks, chunks, setCurrentIndex, addController } = useAppStore();
+  const { setDocId, setChunks, setCurrentIndex, addController, setCurrentSessionId } = useAppStore();
   const [busy, setBusy] = useState(false);
   const [textInput, setTextInput] = useState<string>("This is a demo paragraph.\n\nThis is the next paragraph to synthesize.");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -31,6 +32,7 @@ export default function Home() {
   const [textErrorOnce, setTextErrorOnce] = useState(false);
   const [pdfErrorOnce, setPdfErrorOnce] = useState(false);
   const router = useRouter();
+  const { loadSession, sessions, saveCurrent } = useSessionHistory();
 
   // Initialize perf observer once
   React.useEffect(() => {
@@ -86,10 +88,18 @@ export default function Home() {
       perfMeasure(`prepare`, pstart, pend);
       setStatus({ kind: 'ok', message: `Prepared ${paragraphs.length} paragraph(s). Starting synthesis…` });
       setDocId(doc_id);
-      setChunks(
-        paragraphs.map((p) => ({ paragraph_id: p.paragraph_id, text: p.text, status: "queued" }))
-      );
+      const initialChunks = paragraphs.map((p) => ({ paragraph_id: p.paragraph_id, text: p.text, status: "queued" as const }));
+      setChunks(initialChunks);
       setCurrentIndex(0);
+      // Hard reset playback metrics/state for a brand new session to avoid stale highlights
+      useAppStore.getState().setPlaybackMetrics(0, 0);
+      useAppStore.getState().setPlaying(false);
+      useAppStore.getState().setSessionStatus('in_progress');
+      
+      // Create session record immediately
+      const sessionId = await saveCurrent('in_progress', voice);
+      setCurrentSessionId(sessionId);
+      
       // Synthesize first chunk; then navigate to /session for playback
       await prefetchByIndex(0);
       // navigate to /session
@@ -149,8 +159,17 @@ export default function Home() {
       const demoParas = raw.split(/\n\s*\n/).filter(Boolean);
 
       setDocId('demo-doc');
-      setChunks(demoParas.map((t, i) => ({ paragraph_id: `p${(i + 1).toString().padStart(4, '0')}`, text: t, status: 'queued' })));
+      const demoChunks = demoParas.map((t, i) => ({ paragraph_id: `p${(i + 1).toString().padStart(4, '0')}`, text: t, status: 'queued' as const }));
+      setChunks(demoChunks);
       setCurrentIndex(0);
+      // Hard reset playback metrics/state for demo sessions as well
+      useAppStore.getState().setPlaybackMetrics(0, 0);
+      useAppStore.getState().setPlaying(false);
+      useAppStore.getState().setSessionStatus('in_progress');
+
+      // Create session record immediately for demo
+      const sessionId = await saveCurrent('in_progress', voice);
+      setCurrentSessionId(sessionId);
 
       // Kick off first synthesis only; playback happens in /session
       void prefetchByIndex(0);
@@ -241,25 +260,6 @@ export default function Home() {
             />
           )}
         </div>
-        {/* Session card */}
-        {chunks.length > 0 && chunks.some(c => c.status !== 'done') && (
-          <div className="mx-auto w-[min(820px,92vw)] mt-4">
-            <div className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-transparent px-3 py-2">
-              <div className="flex items-center gap-3 text-sm text-neutral-300">
-                <PlayCircle className="w-4 h-4 text-white" />
-                <span>Active session</span>
-                <span className="text-neutral-500">{`${chunks.filter(c=>c.status==='done').length}/${chunks.length}`}</span>
-                {(useAppStore.getState().controllers.length > 0 || chunks.some(c => c.status === 'queued' || c.status === 'synth')) && (
-                  <span className="relative inline-flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-300"></span>
-                  </span>
-                )}
-              </div>
-              <Link href="/session" className="px-3 py-1.5 rounded-md border border-white/10 text-white hover:bg-white/5 text-sm">Resume</Link>
-            </div>
-          </div>
-        )}
         {/* Single inline banner below buttons */}
         {(error || status) && (
           <div className="mx-auto w-[min(820px,92vw)] rounded-md border border-white/10 bg-transparent mt-3 px-3 py-2 text-sm flex items-center gap-2">
@@ -275,6 +275,52 @@ export default function Home() {
             </div>
           </div>
         )}
+        {/* History section */}
+        <SessionHistory sessions={sessions} onResume={async (id) => {
+          const rec = await loadSession(id);
+          if (!rec) return;
+          
+          // Hydrate store with saved session
+          setDocId(rec.docId);
+          // Normalize chunk statuses to ensure the current chunk is playable and autoplay can trigger
+          const normalized = rec.chunks.map((c, idx) => {
+            if (rec.hasBeenCompleted) {
+              // Completed sessions: start fresh; everything becomes ready if audio exists, otherwise queued
+              return {
+                ...c,
+                status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued',
+              };
+            }
+            if (idx < rec.currentIndex) return { ...c, status: 'done' as const };
+            if (idx === rec.currentIndex) {
+              // Ensure current is playable
+              return { ...c, status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued' };
+            }
+            return { ...c, status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued' };
+          });
+          setChunks(normalized);
+          
+          // Reset position for completed sessions, keep position for in-progress/cancelled
+          const startIndex = rec.hasBeenCompleted ? 0 : rec.currentIndex;
+          setCurrentIndex(startIndex);
+          
+          useAppStore.getState().setPlaybackMetrics(
+            rec.hasBeenCompleted ? 0 : rec.currentElapsedSec, 
+            rec.totalDuration || useAppStore.getState().currentDurationSec
+          );
+          useAppStore.getState().setSpeed(rec.speed);
+          useAppStore.getState().setAutoplayEnabled(rec.autoplayEnabled);
+          // Ensure autoplay effect can run
+          useAppStore.getState().setPlaying(false);
+          
+          // Set session status based on the saved record
+          useAppStore.getState().setSessionStatus(rec.status);
+          
+          // Clear current session ID since we're resuming a different session
+          setCurrentSessionId(undefined);
+          
+          router.push('/session');
+        }} />
       </div>
     </div>
   );

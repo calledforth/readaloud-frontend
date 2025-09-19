@@ -19,6 +19,10 @@ type State = {
   currentElapsedSec: number;
   currentDurationSec: number;
   autoplayEnabled: boolean;
+  sessionStatus: 'in_progress' | 'completed' | 'cancelled'; // Track current session status
+  currentSessionId?: string; // Track the current session ID for live updates
+  historyExpanded: boolean; // Track if session history is expanded
+  isFetchingChunks: boolean; // Track if chunks are being fetched continuously
   setDocId: (id: string) => void;
   setChunks: (c: Chunk[]) => void;
   updateChunk: (pid: string, data: Partial<Chunk>) => void;
@@ -30,6 +34,10 @@ type State = {
   cancelAllControllers: () => void;
   setPlaybackMetrics: (elapsed: number, duration: number) => void;
   setAutoplayEnabled: (b: boolean) => void;
+  setSessionStatus: (status: 'in_progress' | 'completed' | 'cancelled') => void;
+  setCurrentSessionId: (id: string | undefined) => void;
+  setHistoryExpanded: (expanded: boolean) => void;
+  setFetchingChunks: (fetching: boolean) => void;
 };
 
 export const useAppStore = create<State>((set) => ({
@@ -42,6 +50,10 @@ export const useAppStore = create<State>((set) => ({
   currentElapsedSec: 0,
   currentDurationSec: 0,
   autoplayEnabled: true,
+  sessionStatus: 'in_progress',
+  currentSessionId: undefined,
+  historyExpanded: false,
+  isFetchingChunks: false,
   setDocId: (docId) => set({ docId }),
   setChunks: (chunks) => set({ chunks }),
   updateChunk: (paragraph_id, data) =>
@@ -61,6 +73,10 @@ export const useAppStore = create<State>((set) => ({
   }),
   setPlaybackMetrics: (elapsed, duration) => set({ currentElapsedSec: elapsed, currentDurationSec: duration }),
   setAutoplayEnabled: (autoplayEnabled) => set({ autoplayEnabled }),
+  setSessionStatus: (sessionStatus) => set({ sessionStatus }),
+  setCurrentSessionId: (currentSessionId) => set({ currentSessionId }),
+  setHistoryExpanded: (historyExpanded) => set({ historyExpanded }),
+  setFetchingChunks: (isFetchingChunks) => set({ isFetchingChunks }),
 }));
 
 

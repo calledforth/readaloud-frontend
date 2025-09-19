@@ -3,6 +3,7 @@ import React from 'react';
 import { Play, Pause, RotateCcw, XOctagon } from 'lucide-react';
 import { useAppStore } from '../state/store';
 import { AudioController } from '../lib/AudioController';
+import { useSessionHistory } from '../lib/useSessionHistory';
 
 export function MiniPlayer() {
   const { 
@@ -16,7 +17,12 @@ export function MiniPlayer() {
     chunks,
     cancelAllControllers,
     currentIndex,
+    sessionStatus,
+    setSessionStatus,
   } = useAppStore();
+  const { updateCurrentSession } = useSessionHistory();
+  const [hasSavedCancel, setHasSavedCancel] = React.useState(false);
+  const [stopModalOpen, setStopModalOpen] = React.useState(false);
 
   // Move hooks to the top before any early returns
   const [openSpeed, setOpenSpeed] = React.useState(false);
@@ -52,6 +58,21 @@ export function MiniPlayer() {
     } catch {}
     // Reset metrics and offset
     try { setPlaybackMetrics(0, 0); } catch {}
+
+    // Persist session snapshot as cancelled (only once, and only for in_progress sessions)
+    if (!hasSavedCancel && sessionStatus === 'in_progress') {
+      setHasSavedCancel(true);
+      setSessionStatus('cancelled');
+      void (async () => {
+        try { 
+          await updateCurrentSession({ 
+            status: 'cancelled',
+            currentIndex,
+            currentElapsedSec: useAppStore.getState().currentElapsedSec,
+          }); 
+        } catch {}
+      })();
+    }
   };
 
   const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
@@ -114,10 +135,7 @@ export function MiniPlayer() {
           onClick={() => {
             const hasPending = useAppStore.getState().controllers.length > 0 || useAppStore.getState().chunks.some(c => c.status === 'queued' || c.status === 'synth');
             if (!hasPending) return;
-            const ok = window.confirm('Stop all pending synthesis requests?');
-            if (ok) {
-              try { cancelAllControllers(); } catch {}
-            }
+            setStopModalOpen(true);
           }}
           className="w-10 h-10 rounded-full grid place-items-center text-red-400 hover:text-red-300 leading-none"
           aria-label="Stop pending synthesis"
@@ -154,6 +172,45 @@ export function MiniPlayer() {
           )}
         </div>
       </div>
+      {stopModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="bg-neutral-850 rounded-lg p-6 max-w-md mx-4 border border-white/10">
+            <h3 className="text-xl font-semibold text-white mb-3">Stop Synthesis</h3>
+            <p className="text-neutral-300 mb-6 leading-relaxed">
+              Stop all pending synthesis requests and cancel this session?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setStopModalOpen(false)}
+                className="px-4 py-2 text-sm rounded-md border border-white/10 text-neutral-300 hover:brightness-125 transition-all"
+              >
+                Keep fetching
+              </button>
+              <button
+                onClick={async () => {
+                  try { AudioController.stop(); } catch {}
+                  try { cancelAllControllers(); } catch {}
+                  try { setPlaying(false); } catch {}
+                  try { setSessionStatus('cancelled'); } catch {}
+                  try {
+                    const normalized = useAppStore.getState().chunks.map((c) => (
+                      c.status === 'queued' || c.status === 'synth' ? { ...c, status: 'ready' as const } : c
+                    ));
+                    setChunks(normalized);
+                  } catch {}
+                  try {
+                    await updateCurrentSession({ status: 'cancelled' });
+                  } catch {}
+                  setStopModalOpen(false);
+                }}
+                className="px-4 py-2 text-sm rounded-md bg-red-600 text-white hover:brightness-125 transition-all"
+              >
+                Stop now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

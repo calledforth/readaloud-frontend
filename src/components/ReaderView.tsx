@@ -1,12 +1,86 @@
 import React from 'react';
 import { useAppStore } from '../state/store';
+import { Loader2 } from 'lucide-react';
+
+// Minimal markdown formatter for inline styles and lists
+const formatMarkdown = (text: string): React.ReactNode => {
+  const lines = text.split(/\r?\n/);
+
+  const blocks: React.ReactNode[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*([-*])\s+/.test(line)) {
+      // Unordered list
+      const items: string[] = [];
+      while (i < lines.length && /^\s*([-*])\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*([-*])\s+/, ''));
+        i++;
+      }
+      blocks.push(
+        <ul key={`ul-${i}`} className="list-disc list-inside space-y-1 text-left">
+          {items.map((it, idx) => (
+            <li key={idx}>{formatInline(it)}</li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+    if (/^\s*\d+\.\s+/.test(line)) {
+      // Ordered list
+      const items: string[] = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+        i++;
+      }
+      blocks.push(
+        <ol key={`ol-${i}`} className="list-decimal list-inside space-y-1 text-left">
+          {items.map((it, idx) => (
+            <li key={idx}>{formatInline(it)}</li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+    // Regular line - return as inline content, not wrapped in <p>
+    blocks.push(
+      <React.Fragment key={`line-${i}`}>
+        {formatInline(line)}
+        {i < lines.length - 1 && <br />}
+      </React.Fragment>
+    );
+    i++;
+  }
+
+  return <>{blocks}</>;
+};
+
+function formatInline(text: string): React.ReactNode[] {
+  // Handle bold **text**, italic *text* or _text_, and code `code`
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|_[^_]+_)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={idx} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <em key={idx} className="italic text-neutral-200">{part.slice(1, -1)}</em>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={idx} className="bg-neutral-800 px-1 py-0.5 rounded text-sm font-mono text-cyan-300">{part.slice(1, -1)}</code>;
+    }
+    if (part.startsWith('_') && part.endsWith('_')) {
+      return <em key={idx} className="italic text-neutral-200">{part.slice(1, -1)}</em>;
+    }
+    return <React.Fragment key={idx}>{part}</React.Fragment>;
+  });
+}
 
 export function ReaderView({
   onTogglePlay, // eslint-disable-line @typescript-eslint/no-unused-vars
 }: {
   onTogglePlay: () => void;
 }) {
-  const { chunks, currentIndex, currentElapsedSec } = useAppStore();
+  const { chunks, currentIndex, currentElapsedSec, isFetchingChunks } = useAppStore();
 
   // Keeping formatter around for future; no lint error since it's used in UI removal of slider
 
@@ -55,11 +129,21 @@ export function ReaderView({
                         </span>
                       );
                     })
-                  : c.text}
+                  : formatMarkdown(c.text)}
               </p>
             </div>
           );
         })}
+
+      {/* Loading indicator when chunks are being fetched */}
+      {isFetchingChunks && chunks.some(c => c.status === 'queued') && (
+        <div className="flex items-center justify-center py-8">
+          <div className="flex items-center gap-3 text-neutral-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm shimmer-text">Synthesizing remaining chunks...</span>
+          </div>
+        </div>
+      )}
 
       {/* MiniPlayer renders separately */}
 
