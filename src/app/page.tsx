@@ -6,18 +6,18 @@ import { perfMark, perfMeasure, initPerfObserver } from "../lib/perf";
 import { HeroLogo } from "../components/HeroLogo";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { CollapsingIconButton } from "../components/CollapsingIconButton";
-import { TruncatedPreview } from "../components/TruncatedPreview";
+// import { TruncatedPreview } from "../components/TruncatedPreview";
 import { SegmentedSelector, type Mode } from "../components/SegmentedSelector";
 import { PdfDropzone } from "../components/PdfDropzone";
 import { AutoTextarea } from "../components/AutoTextarea";
-import { Play, Sparkles, ChevronDown, AlertTriangle, CheckCircle2, Loader2, PlayCircle } from "lucide-react";
+import { Play, Sparkles, AlertTriangle, CheckCircle2, Loader2, PlayCircle } from "lucide-react";
 import { VoiceSelect } from "../components/VoiceSelect";
 import { AudioController } from "../lib/AudioController";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const { setDocId, setChunks, chunks, setCurrentIndex, currentIndex, setPlaying, addController } = useAppStore();
+  const { setDocId, setChunks, chunks, setCurrentIndex, addController } = useAppStore();
   const [busy, setBusy] = useState(false);
   const [textInput, setTextInput] = useState<string>("This is a demo paragraph.\n\nThis is the next paragraph to synthesize.");
   const [pdfFile, setPdfFile] = useState<File | null>(null);

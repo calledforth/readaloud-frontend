@@ -39,7 +39,7 @@ export default function SessionPage() {
         await AudioController.play(s.currentIndex);
       })();
     }
-  }, [currentIndex, chunks, isPlaying, autoplayEnabled]);
+  }, [currentIndex, isPlaying, autoplayEnabled, addController]);
 
   // Prefetch next queued chunk when advancing
   React.useEffect(() => {

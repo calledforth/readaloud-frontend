@@ -12,7 +12,7 @@ export function MiniPlayer() {
     setChunks,
     setPlaybackMetrics,
     speed,
-    setSpeed,
+    // setSpeed, // not used directly here; speed setter is called via AudioController.setSpeed
     chunks,
     cancelAllControllers,
     currentIndex,

@@ -9,6 +9,13 @@ type ControllerEvents = {
   error?: (err: unknown) => void;
 };
 
+type ListenerMap = {
+  state: Set<(isPlaying: boolean) => void>;
+  index: Set<(index: number) => void>;
+  metrics: Set<(elapsed: number, duration: number) => void>;
+  error: Set<(err: unknown) => void>;
+};
+
 class AudioControllerImpl {
   private audioContext: AudioContext | null = null;
   private gainNode: GainNode | null = null;
@@ -19,12 +26,12 @@ class AudioControllerImpl {
   private startAtContextTime = 0;
   private currentDurationScaled = 0;
   private playbackAllowed = true;
-  private listeners: Required<Record<keyof ControllerEvents, Set<Function>>> = {
+  private listeners: ListenerMap = {
     state: new Set(),
     index: new Set(),
     metrics: new Set(),
     error: new Set(),
-  } as const;
+  };
 
   init(): void {
     if (this.audioContext) return;
@@ -37,17 +44,49 @@ class AudioControllerImpl {
     this.gainNode.connect(this.audioContext.destination);
   }
 
+  on(event: 'state', handler: (isPlaying: boolean) => void): () => void;
+  on(event: 'index', handler: (index: number) => void): () => void;
+  on(event: 'metrics', handler: (elapsed: number, duration: number) => void): () => void;
+  on(event: 'error', handler: (err: unknown) => void): () => void;
   on<E extends keyof ControllerEvents>(event: E, handler: NonNullable<ControllerEvents[E]>): () => void {
-    const set = this.listeners[event] as Set<Function>;
-    set.add(handler as Function);
-    return () => { set.delete(handler as Function); };
+    switch (event) {
+      case 'state':
+        this.listeners.state.add(handler as (isPlaying: boolean) => void);
+        return () => { this.listeners.state.delete(handler as (isPlaying: boolean) => void); };
+      case 'index':
+        this.listeners.index.add(handler as (index: number) => void);
+        return () => { this.listeners.index.delete(handler as (index: number) => void); };
+      case 'metrics':
+        this.listeners.metrics.add(handler as (elapsed: number, duration: number) => void);
+        return () => { this.listeners.metrics.delete(handler as (elapsed: number, duration: number) => void); };
+      case 'error':
+        this.listeners.error.add(handler as (err: unknown) => void);
+        return () => { this.listeners.error.delete(handler as (err: unknown) => void); };
+      default:
+        return () => {};
+    }
   }
 
-  private emit<E extends keyof ControllerEvents>(event: E, ...args: Parameters<NonNullable<ControllerEvents[E]>>): void {
-    const set = this.listeners[event] as Set<Function> | undefined;
-    if (!set) return;
-    for (const fn of set) {
-      try { (fn as any)(...args); } catch {}
+  private emit(event: 'state', isPlaying: boolean): void;
+  private emit(event: 'index', index: number): void;
+  private emit(event: 'metrics', elapsed: number, duration: number): void;
+  private emit(event: 'error', err: unknown): void;
+  private emit(event: keyof ControllerEvents, ...args: unknown[]): void {
+    switch (event) {
+      case 'state':
+        for (const fn of this.listeners.state) { try { fn(args[0] as boolean); } catch {} }
+        break;
+      case 'index':
+        for (const fn of this.listeners.index) { try { fn(args[0] as number); } catch {} }
+        break;
+      case 'metrics':
+        for (const fn of this.listeners.metrics) { try { fn(args[0] as number, args[1] as number); } catch {} }
+        break;
+      case 'error':
+        for (const fn of this.listeners.error) { try { fn(args[0]); } catch {} }
+        break;
+      default:
+        break;
     }
   }
 
@@ -170,7 +209,7 @@ class AudioControllerImpl {
     const elapsed = Math.max(0, ctx.currentTime - this.startAtContextTime);
     const offset = Math.max(0, Math.min(this.currentSource.buffer ? this.currentSource.buffer.duration : this.currentDurationScaled * rate, elapsed * rate));
     this.pausedOffsetSec = offset;
-    try { this.currentSource.onended = null as any; } catch {}
+    try { this.currentSource.onended = null as unknown as (() => void) | null; } catch {}
     try { this.currentSource.stop(); } catch {}
     this.currentSource = null;
     s.updateChunk(cur.paragraph_id, { status: 'paused' });
@@ -185,7 +224,7 @@ class AudioControllerImpl {
 
   private stopInternal(resetOffset: boolean): void {
     if (this.currentSource) {
-      try { this.currentSource.onended = null as any; } catch {}
+      try { this.currentSource.onended = null as unknown as (() => void) | null; } catch {}
       try { this.currentSource.stop(); } catch {}
       this.currentSource.disconnect();
       this.currentSource = null;
