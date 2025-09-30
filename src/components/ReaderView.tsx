@@ -1,79 +1,70 @@
 import React from 'react';
 import { useAppStore } from '../state/store';
 import { Loader2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
-// Minimal markdown formatter for inline styles and lists
-const formatMarkdown = (text: string): React.ReactNode => {
-  const lines = text.split(/\r?\n/);
-
-  const blocks: React.ReactNode[] = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (/^\s*([-*])\s+/.test(line)) {
-      // Unordered list
-      const items: string[] = [];
-      while (i < lines.length && /^\s*([-*])\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*([-*])\s+/, ''));
-        i++;
-      }
-      blocks.push(
-        <ul key={`ul-${i}`} className="list-disc list-inside space-y-1 text-left">
-          {items.map((it, idx) => (
-            <li key={idx}>{formatInline(it)}</li>
-          ))}
-        </ul>
-      );
-      continue;
-    }
-    if (/^\s*\d+\.\s+/.test(line)) {
-      // Ordered list
-      const items: string[] = [];
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
-        i++;
-      }
-      blocks.push(
-        <ol key={`ol-${i}`} className="list-decimal list-inside space-y-1 text-left">
-          {items.map((it, idx) => (
-            <li key={idx}>{formatInline(it)}</li>
-          ))}
-        </ol>
-      );
-      continue;
-    }
-    // Regular line - return as inline content, not wrapped in <p>
-    blocks.push(
-      <React.Fragment key={`line-${i}`}>
-        {formatInline(line)}
-        {i < lines.length - 1 && <br />}
-      </React.Fragment>
-    );
-    i++;
-  }
-
-  return <>{blocks}</>;
+// Custom components for ReactMarkdown styling
+const markdownComponents = {
+  // Headers
+  h1: ({ children }: any) => (
+    <h1 className="text-3xl font-bold text-white mb-4 mt-6">{children}</h1>
+  ),
+  h2: ({ children }: any) => (
+    <h2 className="text-2xl font-bold text-white mb-3 mt-5">{children}</h2>
+  ),
+  h3: ({ children }: any) => (
+    <h3 className="text-xl font-semibold text-white mb-2 mt-4">{children}</h3>
+  ),
+  h4: ({ children }: any) => (
+    <h4 className="text-lg font-semibold text-neutral-100 mb-2 mt-3">{children}</h4>
+  ),
+  h5: ({ children }: any) => (
+    <h5 className="text-base font-semibold text-neutral-100 mb-2 mt-3">{children}</h5>
+  ),
+  h6: ({ children }: any) => (
+    <h6 className="text-sm font-semibold text-neutral-200 mb-2 mt-2">{children}</h6>
+  ),
+  // Paragraphs
+  p: ({ children }: any) => (
+    <p className="mb-3 leading-relaxed">{children}</p>
+  ),
+  // Lists
+  ul: ({ children }: any) => (
+    <ul className="list-disc list-outside ml-6 mb-3 space-y-1">{children}</ul>
+  ),
+  ol: ({ children }: any) => (
+    <ol className="list-decimal list-outside ml-6 mb-3 space-y-1">{children}</ol>
+  ),
+  li: ({ children }: any) => (
+    <li className="text-neutral-200">{children}</li>
+  ),
+  // Inline formatting
+  strong: ({ children }: any) => (
+    <strong className="font-semibold text-white">{children}</strong>
+  ),
+  em: ({ children }: any) => (
+    <em className="italic text-neutral-200">{children}</em>
+  ),
+  code: ({ children }: any) => (
+    <code className="bg-neutral-800 px-1.5 py-0.5 rounded text-sm font-mono text-cyan-300">{children}</code>
+  ),
+  // Code blocks
+  pre: ({ children }: any) => (
+    <pre className="bg-neutral-800 rounded-lg p-4 mb-3 overflow-x-auto">{children}</pre>
+  ),
+  // Blockquotes
+  blockquote: ({ children }: any) => (
+    <blockquote className="border-l-4 border-neutral-600 pl-4 italic text-neutral-300 mb-3">{children}</blockquote>
+  ),
+  // Horizontal rules
+  hr: () => (
+    <hr className="border-neutral-700 my-6" />
+  ),
+  // Links
+  a: ({ children, href }: any) => (
+    <a href={href} className="text-cyan-400 hover:text-cyan-300 underline" target="_blank" rel="noopener noreferrer">{children}</a>
+  ),
 };
-
-function formatInline(text: string): React.ReactNode[] {
-  // Handle bold **text**, italic *text* or _text_, and code `code`
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|_[^_]+_)/g);
-  return parts.map((part, idx) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={idx} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith('*') && part.endsWith('*')) {
-      return <em key={idx} className="italic text-neutral-200">{part.slice(1, -1)}</em>;
-    }
-    if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={idx} className="bg-neutral-800 px-1 py-0.5 rounded text-sm font-mono text-cyan-300">{part.slice(1, -1)}</code>;
-    }
-    if (part.startsWith('_') && part.endsWith('_')) {
-      return <em key={idx} className="italic text-neutral-200">{part.slice(1, -1)}</em>;
-    }
-    return <React.Fragment key={idx}>{part}</React.Fragment>;
-  });
-}
 
 export function ReaderView({
   onTogglePlay, // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -103,8 +94,8 @@ export function ReaderView({
           const isCurrent = idx === currentIndex;
           const isPast = idx < currentIndex;
           return (
-            <div key={c.paragraph_id} data-current={isCurrent ? 'true' : undefined} className={`text-center transition-all ${isCurrent ? 'opacity-100' : isPast ? 'opacity-100' : 'opacity-60'}`}>
-              <p className={`mx-auto max-w-3xl leading-9 tracking-[0.02em] ${isCurrent || isPast ? 'text-neutral-100 text-xl md:text-2xl shimmer-text' : 'text-neutral-400 text-lg md:text-xl'}`}>
+            <div key={c.paragraph_id} data-current={isCurrent ? 'true' : undefined} className={`text-left transition-all ${isCurrent ? 'opacity-100' : isPast ? 'opacity-100' : 'opacity-60'}`}>
+              <div className={`mx-auto max-w-3xl leading-9 tracking-[0.02em] ${isCurrent || isPast ? 'text-neutral-100 text-xl md:text-2xl shimmer-text' : 'text-neutral-400 text-lg md:text-xl'}`}>
                 {c.timings && isCurrent
                   ? c.timings.map((w, i) => {
                       const cur = currentElapsedSec * 1000;
@@ -129,8 +120,8 @@ export function ReaderView({
                         </span>
                       );
                     })
-                  : formatMarkdown(c.text)}
-              </p>
+                  : <ReactMarkdown components={markdownComponents}>{c.text}</ReactMarkdown>}
+              </div>
             </div>
           );
         })}
