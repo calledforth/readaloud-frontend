@@ -41,6 +41,7 @@ export async function prepareDocument(raw: string, pdfBase64?: string, options?:
   doc_id: string;
   paragraphs: Paragraph[];
 }> {
+  console.log('MOCK prepareDocument called - no real API call made');
   const opts = options || {};
   await maybeDelay(80, opts);
   const doc_id = 'mock-doc';
@@ -67,6 +68,7 @@ export async function synthesizeChunk(
   sample_rate = 24000,
   options?: { signal?: AbortSignal; timeoutMs?: number; retries?: number },
 ): Promise<{ audio_base64: string; sample_rate: number; cleaned_text: string; timings: Array<{ word: string; start_ms: number; end_ms: number; char_start: number; char_end: number }> }> {
+  console.log('MOCK synthesizeChunk called - no real API call made');
   const opts = options || {};
   // Retry with jittered backoff
   const maxRetries = Math.min(2, opts.retries ?? 2);

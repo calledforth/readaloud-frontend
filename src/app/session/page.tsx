@@ -9,14 +9,16 @@ import { TruncatedPreview } from "../../components/TruncatedPreview";
 import { ChunkFeed } from "../../components/ChunkFeed";
 import { ReaderView } from "../../components/ReaderView";
 import { MiniPlayer } from "../../components/MiniPlayer";
-import { Settings } from "lucide-react";
+import { Settings, History } from "lucide-react";
 import { synthesizeChunk } from "../../lib/provider";
 import { useSessionHistory } from "../../lib/useSessionHistory";
+import { getSession } from "../../lib/sessionDb";
+import { HistoryModal } from "../../components/HistoryModal";
 
 export default function SessionPage() {
   const router = useRouter();
   const { chunks, currentIndex, addController, isPlaying, autoplayEnabled, sessionStatus, setFetchingChunks } = useAppStore();
-  const { updateCurrentSession } = useSessionHistory();
+  const { updateCurrentSession, sessions, saveCurrent, refresh } = useSessionHistory();
 
   React.useEffect(() => {
     // If no session exists, go home
@@ -140,9 +142,54 @@ export default function SessionPage() {
           router.push("/");
         }}
         right={
-          <button className="p-2 rounded-full" aria-label="Settings" style={{ marginRight: 0 }}>
-            <Settings className="w-4 h-4 text-white" />
-          </button>
+          <div className="flex items-center gap-2">
+            <HistoryModal sessions={sessions} onResume={async (id) => {
+              // Stop current playback
+              try { AudioController.stop(); } catch {}
+              try { useAppStore.getState().setPlaying(false); } catch {}
+              try { useAppStore.getState().setFetchingChunks(false); } catch {}
+
+              const rec = await getSession(id);
+              if (!rec) return;
+
+              // Hydrate store with saved session
+              useAppStore.getState().setDocId(rec.docId);
+              // Normalize chunk statuses to ensure the current chunk is playable and autoplay can trigger
+              const normalized = rec.chunks.map((c) => {
+                if (rec.hasBeenCompleted) {
+                  // Completed sessions: start fresh; everything becomes ready if audio exists, otherwise queued
+                  return {
+                    ...c,
+                    status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued',
+                  };
+                } else {
+                  // Incomplete sessions: keep original statuses but ensure consistency
+                  return c;
+                }
+              });
+              useAppStore.getState().setChunks(normalized);
+              useAppStore.getState().setCurrentIndex(rec.currentIndex);
+              // Hard reset playback metrics/state for a brand new session to avoid stale highlights
+              useAppStore.getState().setPlaybackMetrics(0, 0);
+              useAppStore.getState().setPlaying(false);
+              useAppStore.getState().setSessionStatus('in_progress');
+              // Create session record immediately
+              const sessionId = await saveCurrent('in_progress', 'af_heart'); // default voice
+              useAppStore.getState().setCurrentSessionId(sessionId);
+
+              // Stay on session page (don't navigate)
+            }} onRefresh={refresh}>
+              <button
+                className="p-2 rounded-md hover:bg-white/10 transition-colors"
+                aria-label="Session history"
+              >
+                <History className="w-5 h-5 text-neutral-400" />
+              </button>
+            </HistoryModal>
+            <button className="p-2 rounded-full" aria-label="Settings" style={{ marginRight: 0 }}>
+              <Settings className="w-4 h-4 text-white" />
+            </button>
+          </div>
         }
       />
       <div className="pt-16" />

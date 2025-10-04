@@ -10,12 +10,13 @@ import { CollapsingIconButton } from "../components/CollapsingIconButton";
 import { SegmentedSelector, type Mode } from "../components/SegmentedSelector";
 import { PdfDropzone } from "../components/PdfDropzone";
 import { AutoTextarea } from "../components/AutoTextarea";
-import { Play, Sparkles, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { Play, Sparkles, AlertTriangle, CheckCircle2, Loader2, History } from "lucide-react";
 import { VoiceSelect } from "../components/VoiceSelect";
 import { AudioController } from "../lib/AudioController";
-import { SessionHistory } from "../components/SessionHistory";
 import { useSessionHistory } from "../lib/useSessionHistory";
 import { useRouter } from "next/navigation";
+import { TopBar } from "../components/TopBar";
+import { HistoryModal } from "../components/HistoryModal";
 
 export default function Home() {
   const { setDocId, setChunks, setCurrentIndex, addController, setCurrentSessionId } = useAppStore();
@@ -32,7 +33,7 @@ export default function Home() {
   const [textErrorOnce, setTextErrorOnce] = useState(false);
   const [pdfErrorOnce, setPdfErrorOnce] = useState(false);
   const router = useRouter();
-  const { loadSession, sessions, saveCurrent } = useSessionHistory();
+  const { loadSession, sessions, saveCurrent, refresh } = useSessionHistory();
 
   // Initialize perf observer once
   React.useEffect(() => {
@@ -69,6 +70,10 @@ export default function Home() {
     }
     setBusy(true);
     try {
+      // Switch to real RunPod provider for regular processing
+      const { switchToRunpodProvider } = await import('../lib/provider');
+      switchToRunpodProvider();
+
       // Start a fresh controller session (single active session)
       try { AudioController.load(); } catch {}
       // Starting a new session: clear cancel flag
@@ -155,6 +160,10 @@ export default function Home() {
     try {
       useAppStore.getState().setCancelled(false);
 
+      // Switch to mock provider for demo mode
+      const { switchToMockProvider } = await import('../lib/provider');
+      switchToMockProvider();
+
       const raw = textInput && textInput.trim().length > 0 ? textInput : 'Demo paragraph one.\n\nDemo paragraph two.\n\nDemo paragraph three.';
       const demoParas = raw.split(/\n\s*\n/).filter(Boolean);
 
@@ -198,6 +207,49 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-200">
+      <TopBar
+        right={
+          <HistoryModal sessions={sessions} onResume={async (id) => {
+            const rec = await loadSession(id);
+            if (!rec) return;
+
+            // Hydrate store with saved session
+            setDocId(rec.docId);
+            // Normalize chunk statuses to ensure the current chunk is playable and autoplay can trigger
+            const normalized = rec.chunks.map((c) => {
+              if (rec.hasBeenCompleted) {
+                // Completed sessions: start fresh; everything becomes ready if audio exists, otherwise queued
+                return {
+                  ...c,
+                  status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued',
+                };
+              } else {
+                // Incomplete sessions: keep original statuses but ensure consistency
+                return c;
+              }
+            });
+            setChunks(normalized);
+            setCurrentIndex(rec.currentIndex);
+            // Hard reset playback metrics/state for a brand new session to avoid stale highlights
+            useAppStore.getState().setPlaybackMetrics(0, 0);
+            useAppStore.getState().setPlaying(false);
+            useAppStore.getState().setSessionStatus('in_progress');
+            // Create session record immediately
+            const sessionId = await saveCurrent('in_progress', voice);
+            setCurrentSessionId(sessionId);
+
+            // Navigate to session page
+            router.push('/session');
+          }} onRefresh={refresh}>
+            <button
+              className="p-2 rounded-md hover:bg-white/10 transition-colors"
+              aria-label="Session history"
+            >
+              <History className="w-5 h-5 text-neutral-400" />
+            </button>
+          </HistoryModal>
+        }
+      />
       <div className="mx-auto w-[min(820px,92vw)] pt-12 md:pt-16 pb-10 space-y-6 px-3 md:px-0">
         <div className="flex items-center justify-center">
           <HeroLogo />
@@ -275,52 +327,6 @@ export default function Home() {
             </div>
           </div>
         )}
-        {/* History section */}
-        <SessionHistory sessions={sessions} onResume={async (id) => {
-          const rec = await loadSession(id);
-          if (!rec) return;
-          
-          // Hydrate store with saved session
-          setDocId(rec.docId);
-          // Normalize chunk statuses to ensure the current chunk is playable and autoplay can trigger
-          const normalized = rec.chunks.map((c, idx) => {
-            if (rec.hasBeenCompleted) {
-              // Completed sessions: start fresh; everything becomes ready if audio exists, otherwise queued
-              return {
-                ...c,
-                status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued',
-              };
-            }
-            if (idx < rec.currentIndex) return { ...c, status: 'done' as const };
-            if (idx === rec.currentIndex) {
-              // Ensure current is playable
-              return { ...c, status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued' };
-            }
-            return { ...c, status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued' };
-          });
-          setChunks(normalized);
-          
-          // Reset position for completed sessions, keep position for in-progress/cancelled
-          const startIndex = rec.hasBeenCompleted ? 0 : rec.currentIndex;
-          setCurrentIndex(startIndex);
-          
-          useAppStore.getState().setPlaybackMetrics(
-            rec.hasBeenCompleted ? 0 : rec.currentElapsedSec, 
-            rec.totalDuration || useAppStore.getState().currentDurationSec
-          );
-          useAppStore.getState().setSpeed(rec.speed);
-          useAppStore.getState().setAutoplayEnabled(rec.autoplayEnabled);
-          // Ensure autoplay effect can run
-          useAppStore.getState().setPlaying(false);
-          
-          // Set session status based on the saved record
-          useAppStore.getState().setSessionStatus(rec.status);
-          
-          // Clear current session ID since we're resuming a different session
-          setCurrentSessionId(undefined);
-          
-          router.push('/session');
-        }} />
       </div>
     </div>
   );

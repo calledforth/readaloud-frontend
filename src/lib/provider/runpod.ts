@@ -1,6 +1,8 @@
 // Runpod provider that calls Next.js API routes
 // The API routes handle the actual Runpod communication securely
 
+import { setCachedHealth } from '../healthCache';
+
 async function callApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const response = await fetch(endpoint, {
     headers: {
@@ -20,10 +22,21 @@ async function callApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
 }
 
 export async function health(): Promise<{ ok: true; status: 'ok'; version: string }> {
-  return callApi('/api/health', {
-    method: 'POST',
-    body: JSON.stringify({ input: { op: 'health' } }),
-  });
+  try {
+    const result = await callApi<{ ok: true; status: 'ok'; version: string }>('/api/health', {
+      method: 'POST',
+      body: JSON.stringify({ input: { op: 'health' } }),
+    });
+    
+    // Cache successful result
+    setCachedHealth(result, null);
+    return result;
+  } catch (error) {
+    // Cache error for a shorter time to avoid repeated failures
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    setCachedHealth(null, errorMessage);
+    throw error;
+  }
 }
 
 type Paragraph = { paragraph_id: string; text: string };

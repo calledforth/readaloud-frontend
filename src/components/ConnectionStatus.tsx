@@ -1,6 +1,7 @@
 "use client";
 import React from 'react';
 import { health } from '../lib/provider';
+import { getCachedHealth, isHealthCacheValid } from '../lib/healthCache';
 
 type Status = 'checking' | 'checking_runpod' | 'connected' | 'error';
 
@@ -10,7 +11,16 @@ export function ConnectionStatus() {
 
   React.useEffect(() => {
     let alive = true;
+    
     const run = async () => {
+      // Check if we have a valid cached result first
+      const cached = getCachedHealth();
+      if (cached && isHealthCacheValid()) {
+        setVersion(cached.version);
+        setStatus('connected');
+        return;
+      }
+
       setStatus('checking');
       try {
         await new Promise((r) => setTimeout(r, 400));
@@ -30,6 +40,7 @@ export function ConnectionStatus() {
         setStatus('error');
       }
     };
+    
     void run();
     // Long cadence: every 15 minutes
     const t = setInterval(run, 15 * 60 * 1000);
