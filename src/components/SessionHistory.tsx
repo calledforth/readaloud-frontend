@@ -23,7 +23,8 @@ export function SessionHistory({ sessions, onResume, onRefresh }: { sessions: Se
             sessions.map((s, index) => {
               const isInProgress = s.status === 'in_progress';
               const hasAllAudio = s.chunks.every(c => c.audioBase64);
-              const isLoading = isInProgress && !hasAllAudio;
+              const readyCount = s.chunks.filter(c => !!c.audioBase64).length;
+              const showReadyProgress = (isInProgress || s.status === 'cancelled') && !hasAllAudio;
 
               return (
                 <div
@@ -35,7 +36,7 @@ export function SessionHistory({ sessions, onResume, onRefresh }: { sessions: Se
                     <div className="flex flex-col flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-1">
                         <span className="text-neutral-100 text-base font-medium truncate">{s.title}</span>
-                        {isLoading && (
+                        {isInProgress && !hasAllAudio && (
                           <Loader2 className="w-4 h-4 text-cyan-400 animate-spin flex-shrink-0" />
                         )}
                       </div>
@@ -53,9 +54,9 @@ export function SessionHistory({ sessions, onResume, onRefresh }: { sessions: Se
                           }`}>
                             {s.status}
                           </span>
-                          {isLoading && (
-                            <span className="text-cyan-400">
-                              {s.chunks.filter(c => c.audioBase64).length}/{s.chunks.length} ready
+                          {showReadyProgress && (
+                            <span className={`${s.status === 'cancelled' ? 'text-amber-400' : 'text-cyan-400'}`}>
+                              {readyCount}/{s.chunks.length} ready
                             </span>
                           )}
                         </div>

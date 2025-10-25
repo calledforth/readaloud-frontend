@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logPrepare } from '@/lib/simpleLogger';
+import { getClientIp } from '@/lib/getClientIp';
 
 const RUNPOD_ENDPOINT = process.env.RUNPOD_ENDPOINT;
 const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY;
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  let inputText: string | undefined;
+  let docId: string | undefined;
+  
   try {
     if (!RUNPOD_ENDPOINT || !RUNPOD_API_KEY) {
       return NextResponse.json(
@@ -14,6 +20,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { raw, pdfBase64 } = body;
+    inputText = raw;
 
     if (!raw && !pdfBase64) {
       return NextResponse.json(
@@ -22,11 +29,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const doc_id = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    docId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     const input = {
       op: 'prepare_document',
-      doc_id,
+      doc_id: docId,
       input: {
         kind: pdfBase64 ? 'pdf_base64' : 'raw_text',
         raw_text: raw,
@@ -59,12 +66,34 @@ export async function POST(request: NextRequest) {
       throw new Error(`Runpod error: ${(payload as { message?: string })?.message || 'Unknown error'}`);
     }
 
+    // SUCCESS: Log to Logtail (non-blocking)
+    void logPrepare({
+      source: 'api.prepare',
+      status: 'success',
+      ip,
+      docId: docId || '',
+      inputType: pdfBase64 ? 'pdf' : 'raw',
+      charCount: inputText?.length || 0,
+      textPreview: inputText || ''
+    });
+
     // Return in the format expected by the frontend
     return NextResponse.json({
       doc_id: (payload as { doc_id: string }).doc_id,
       paragraphs: (payload as { paragraphs: Array<{ paragraph_id: string; text: string }> }).paragraphs,
     });
   } catch (error) {
+    // ERROR: Log to Logtail
+    void logPrepare({
+      source: 'api.prepare',
+      status: 'error',
+      ip,
+      docId: docId || '',
+      inputType: 'raw', // fallback
+      charCount: inputText?.length || 0,
+      textPreview: inputText || '',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error'
+    });
     console.error('Prepare document failed:', error);
     return NextResponse.json(
       { error: 'Prepare document failed', details: error instanceof Error ? error.message : 'Unknown error' },

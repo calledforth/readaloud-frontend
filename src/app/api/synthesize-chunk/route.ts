@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logSynthesize } from '@/lib/simpleLogger';
+import { getClientIp } from '@/lib/getClientIp';
 
 const RUNPOD_ENDPOINT = process.env.RUNPOD_ENDPOINT;
 const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY;
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  let inputText: string | undefined;
+  let docId: string | undefined;
+  let voice: string | undefined;
+  
   try {
     if (!RUNPOD_ENDPOINT || !RUNPOD_API_KEY) {
       return NextResponse.json(
@@ -13,7 +20,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { doc_id, paragraph_id, text, sample_rate = 24000, voice } = body;
+    const { doc_id, paragraph_id, text, sample_rate = 24000, voice: voiceParam } = body;
+    
+    docId = doc_id;
+    inputText = text;
+    voice = voiceParam || 'af_heart';
 
     if (!doc_id || !paragraph_id || !text) {
       return NextResponse.json(
@@ -27,7 +38,7 @@ export async function POST(request: NextRequest) {
       doc_id,
       paragraph_id,
       text,
-      voice: voice || 'af_heart',
+      voice,
       sample_rate,
       rate: 1.0,
     };
@@ -55,6 +66,17 @@ export async function POST(request: NextRequest) {
       throw new Error(`Runpod error: ${(payload as { message?: string })?.message || 'Unknown error'}`);
     }
 
+    // SUCCESS: Log to Logtail (non-blocking)
+    void logSynthesize({
+      source: 'api.synthesize',
+      status: 'success',
+      ip,
+      docId: docId || '',
+      voice: voice || 'af_heart',
+      charCount: inputText?.length || 0,
+      textPreview: inputText || ''
+    });
+
     // Return in the format expected by the frontend
     return NextResponse.json({
       audio_base64: (payload as { audio_base64: string }).audio_base64,
@@ -63,6 +85,17 @@ export async function POST(request: NextRequest) {
       timings: (payload as { timings: Array<{ word: string; start_ms: number; end_ms: number; char_start: number; char_end: number }> }).timings,
     });
   } catch (error) {
+    // ERROR: Log to Logtail
+    void logSynthesize({
+      source: 'api.synthesize',
+      status: 'error',
+      ip,
+      docId: docId || '',
+      voice: voice || 'af_heart',
+      charCount: inputText?.length || 0,
+      textPreview: inputText || '',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error'
+    });
     console.error('Synthesize chunk failed:', error);
     return NextResponse.json(
       { error: 'Synthesize chunk failed', details: error instanceof Error ? error.message : 'Unknown error' },

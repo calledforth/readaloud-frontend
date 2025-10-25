@@ -12,13 +12,12 @@ import { MiniPlayer } from "../../components/MiniPlayer";
 import { Settings, History } from "lucide-react";
 import { synthesizeChunk } from "../../lib/provider";
 import { useSessionHistory } from "../../lib/useSessionHistory";
-import { getSession } from "../../lib/sessionDb";
 import { HistoryModal } from "../../components/HistoryModal";
 
 export default function SessionPage() {
   const router = useRouter();
   const { chunks, currentIndex, addController, isPlaying, autoplayEnabled, sessionStatus, setFetchingChunks } = useAppStore();
-  const { updateCurrentSession, sessions, saveCurrent, refresh } = useSessionHistory();
+  const { updateCurrentSession, cancelCurrentSession, completeCurrentSession, resumeSession, sessions, refresh } = useSessionHistory();
 
   React.useEffect(() => {
     // If no session exists, go home
@@ -70,20 +69,15 @@ export default function SessionPage() {
     const allHaveAudio = s.chunks.length > 0 && s.chunks.every(c => c.audioBase64);
     if (allHaveAudio && !hasSavedCompletion && s.sessionStatus === 'in_progress') {
       setHasSavedCompletion(true);
-      s.setSessionStatus('completed');
-      void (async () => { 
-        try { 
-          await updateCurrentSession({ 
-            status: 'completed',
-            hasBeenCompleted: true,
-            completedAt: Date.now(),
-          }); 
+      void (async () => {
+        try {
+          await completeCurrentSession();
         } catch (e) {
           console.error('Failed to mark session as completed:', e);
-        } 
+        }
       })();
     }
-  }, [chunks, updateCurrentSession, hasSavedCompletion, sessionStatus]);
+  }, [chunks, updateCurrentSession, hasSavedCompletion, sessionStatus, completeCurrentSession]);
 
   // Continuous chunk fetching - fetch all queued chunks in sequence (only when in_progress)
   React.useEffect(() => {
@@ -104,6 +98,12 @@ export default function SessionPage() {
     
     // Fetch chunks sequentially to avoid overwhelming the server
     const fetchNextChunk = async (chunkIndex: number) => {
+      // Check if session has been cancelled before continuing
+      if (useAppStore.getState().sessionStatus === 'cancelled') {
+        setFetchingChunks(false);
+        return;
+      }
+      
       if (chunkIndex >= queuedChunks.length) {
         setFetchingChunks(false);
         return;
@@ -117,17 +117,25 @@ export default function SessionPage() {
         const res = await synthesizeChunk(docId, chunk.paragraph_id, chunk.text, 24000, { signal: ctrl.signal, timeoutMs: 30000 });
         useAppStore.getState().updateChunk(chunk.paragraph_id, { status: 'ready', audioBase64: res.audio_base64, timings: res.timings });
         
-        // Continue with next chunk after a small delay
-        setTimeout(() => fetchNextChunk(chunkIndex + 1), 100);
+        // Check again before continuing to next chunk
+        if (useAppStore.getState().sessionStatus !== 'cancelled') {
+          setTimeout(() => fetchNextChunk(chunkIndex + 1), 100);
+        } else {
+          setFetchingChunks(false);
+        }
       } catch {
-        // If chunk fails, continue with next one
-        setTimeout(() => fetchNextChunk(chunkIndex + 1), 100);
+        // Check again before continuing to next chunk
+        if (useAppStore.getState().sessionStatus !== 'cancelled') {
+          setTimeout(() => fetchNextChunk(chunkIndex + 1), 100);
+        } else {
+          setFetchingChunks(false);
+        }
       }
     };
 
     // Start fetching from the first queued chunk
     fetchNextChunk(0);
-  }, [chunks, addController, setFetchingChunks]);
+  }, [chunks, addController, setFetchingChunks, sessionStatus]);
 
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-200">
@@ -138,6 +146,20 @@ export default function SessionPage() {
           try { useAppStore.getState().setPlaying(false); } catch {}
           try { useAppStore.getState().setFetchingChunks(false); } catch {}
           try { useAppStore.getState().cancelAllControllers(); } catch {}
+          // Session exit: do NOT change status. Optionally snapshot progress.
+          try {
+            const s = useAppStore.getState();
+            void (async () => {
+              try {
+                await updateCurrentSession({
+                  chunks: s.chunks,
+                  currentIndex: s.currentIndex,
+                  currentElapsedSec: s.currentElapsedSec,
+                  paragraphCount: s.chunks.length,
+                });
+              } catch {}
+            })();
+          } catch {}
           // Keep session/state to allow resume
           router.push("/");
         }}
@@ -148,8 +170,9 @@ export default function SessionPage() {
               try { AudioController.stop(); } catch {}
               try { useAppStore.getState().setPlaying(false); } catch {}
               try { useAppStore.getState().setFetchingChunks(false); } catch {}
+              try { useAppStore.getState().cancelAllControllers(); } catch {}
 
-              const rec = await getSession(id);
+              const rec = await resumeSession(id);
               if (!rec) return;
 
               // Hydrate store with saved session
@@ -173,9 +196,7 @@ export default function SessionPage() {
               useAppStore.getState().setPlaybackMetrics(0, 0);
               useAppStore.getState().setPlaying(false);
               useAppStore.getState().setSessionStatus('in_progress');
-              // Create session record immediately
-              const sessionId = await saveCurrent('in_progress', 'af_heart'); // default voice
-              useAppStore.getState().setCurrentSessionId(sessionId);
+              // Session ID is already set by the resumeSession function
 
               // Stay on session page (don't navigate)
             }} onRefresh={refresh}>

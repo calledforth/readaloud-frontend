@@ -6,7 +6,7 @@ import { AudioController } from '../lib/AudioController';
 import { useSessionHistory } from '../lib/useSessionHistory';
 
 export function MiniPlayer() {
-  const { 
+  const {
     isPlaying,
     setPlaying,
     setCurrentIndex,
@@ -19,8 +19,9 @@ export function MiniPlayer() {
     currentIndex,
     sessionStatus,
     setSessionStatus,
+    setFetchingChunks,
   } = useAppStore();
-  const { updateCurrentSession } = useSessionHistory();
+  const { cancelCurrentSession } = useSessionHistory();
   const [hasSavedCancel, setHasSavedCancel] = React.useState(false);
   const [stopModalOpen, setStopModalOpen] = React.useState(false);
 
@@ -64,12 +65,8 @@ export function MiniPlayer() {
       setHasSavedCancel(true);
       setSessionStatus('cancelled');
       void (async () => {
-        try { 
-          await updateCurrentSession({ 
-            status: 'cancelled',
-            currentIndex,
-            currentElapsedSec: useAppStore.getState().currentElapsedSec,
-          }); 
+        try {
+          await cancelCurrentSession();
         } catch {}
       })();
     }
@@ -192,14 +189,10 @@ export function MiniPlayer() {
                   try { cancelAllControllers(); } catch {}
                   try { setPlaying(false); } catch {}
                   try { setSessionStatus('cancelled'); } catch {}
+                  try { setFetchingChunks(false); } catch {}
+                  // Do not mutate chunks here; keep remaining non-audio chunks for divider display
                   try {
-                    const normalized = useAppStore.getState().chunks.map((c) => (
-                      c.status === 'queued' || c.status === 'synth' ? { ...c, status: 'ready' as const } : c
-                    ));
-                    setChunks(normalized);
-                  } catch {}
-                  try {
-                    await updateCurrentSession({ status: 'cancelled' });
+                    await cancelCurrentSession();
                   } catch {}
                   setStopModalOpen(false);
                 }}

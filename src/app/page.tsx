@@ -17,9 +17,10 @@ import { useSessionHistory } from "../lib/useSessionHistory";
 import { useRouter } from "next/navigation";
 import { TopBar } from "../components/TopBar";
 import { HistoryModal } from "../components/HistoryModal";
+import { WelcomeModal } from "../components/WelcomeModal";
 
 export default function Home() {
-  const { setDocId, setChunks, setCurrentIndex, addController, setCurrentSessionId } = useAppStore();
+  const { setDocId, setChunks, setCurrentIndex, addController } = useAppStore();
   const [busy, setBusy] = useState(false);
   const [textInput, setTextInput] = useState<string>("This is a demo paragraph.\n\nThis is the next paragraph to synthesize.");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -33,7 +34,7 @@ export default function Home() {
   const [textErrorOnce, setTextErrorOnce] = useState(false);
   const [pdfErrorOnce, setPdfErrorOnce] = useState(false);
   const router = useRouter();
-  const { loadSession, sessions, saveCurrent, refresh } = useSessionHistory();
+  const { startSession, resumeSession, sessions, refresh } = useSessionHistory();
 
   // Initialize perf observer once
   React.useEffect(() => {
@@ -101,9 +102,8 @@ export default function Home() {
       useAppStore.getState().setPlaying(false);
       useAppStore.getState().setSessionStatus('in_progress');
       
-      // Create session record immediately
-      const sessionId = await saveCurrent('in_progress', voice);
-      setCurrentSessionId(sessionId);
+      // Create session record immediately using the new SessionLifecycle service
+      await startSession(doc_id, initialChunks, voice);
       
       // Synthesize first chunk; then navigate to /session for playback
       await prefetchByIndex(0);
@@ -176,9 +176,8 @@ export default function Home() {
       useAppStore.getState().setPlaying(false);
       useAppStore.getState().setSessionStatus('in_progress');
 
-      // Create session record immediately for demo
-      const sessionId = await saveCurrent('in_progress', voice);
-      setCurrentSessionId(sessionId);
+      // Create session record immediately for demo using the new SessionLifecycle service
+      await startSession('demo-doc', demoChunks, voice);
 
       // Kick off first synthesis only; playback happens in /session
       void prefetchByIndex(0);
@@ -207,10 +206,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-200">
+      <WelcomeModal />
       <TopBar
         right={
           <HistoryModal sessions={sessions} onResume={async (id) => {
-            const rec = await loadSession(id);
+            const rec = await resumeSession(id);
             if (!rec) return;
 
             // Hydrate store with saved session
@@ -234,9 +234,7 @@ export default function Home() {
             useAppStore.getState().setPlaybackMetrics(0, 0);
             useAppStore.getState().setPlaying(false);
             useAppStore.getState().setSessionStatus('in_progress');
-            // Create session record immediately
-            const sessionId = await saveCurrent('in_progress', voice);
-            setCurrentSessionId(sessionId);
+            // Session ID is already set by the resumeSession function
 
             // Navigate to session page
             router.push('/session');

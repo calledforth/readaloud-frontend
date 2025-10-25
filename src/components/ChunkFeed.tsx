@@ -4,7 +4,7 @@ import { ProgressText } from './ProgressText';
 import { Loader2 } from 'lucide-react';
 
 export function ChunkFeed({ headless = false }: { headless?: boolean; }) {
-  const { chunks, currentIndex, isPlaying, currentElapsedSec, currentDurationSec, isFetchingChunks } = useAppStore();
+  const { chunks, currentIndex, isPlaying, currentElapsedSec, currentDurationSec, isFetchingChunks, sessionStatus } = useAppStore();
   const [progress, setProgress] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const currentChunkRef = useRef<string | null>(null);
@@ -50,6 +50,22 @@ export function ChunkFeed({ headless = false }: { headless?: boolean; }) {
           )}
         </div>
       ))}
+
+      {/* Divider and remaining queued chunks when a session was cancelled */}
+      {sessionStatus === 'cancelled' && hasQueuedChunks && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 text-xs text-amber-300/80">
+            <div className="h-px flex-1 bg-amber-400/30" />
+            <span className="uppercase tracking-wide">Not synthesized yet</span>
+            <div className="h-px flex-1 bg-amber-400/30" />
+          </div>
+          {queuedChunks.map((c) => (
+            <div key={c.paragraph_id} data-pid={c.paragraph_id} className="border-b border-white/5 pb-4 opacity-70">
+              <ProgressText text={c.text} progress={0} timings={c.timings} />
+            </div>
+          ))}
+        </div>
+      )}
       
       {/* Loading indicator when chunks are being fetched */}
       {isFetchingChunks && hasQueuedChunks && (
