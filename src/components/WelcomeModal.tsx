@@ -95,7 +95,7 @@ export function WelcomeModal({ forceOpen, onClose }: WelcomeModalProps) {
           <div className="flex justify-center">
             <button
               onClick={handleClose}
-              className="px-6 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-md transition-colors border border-white/10 hover:border-white/20"
+              className="px-6 py-2 bg-transparent hover:bg-white/5 text-white rounded-md transition-colors border border-white/20 hover:border-white/30"
             >
               Get Started
             </button>
@@ -447,12 +447,12 @@ function AnimatedPlaybackSVG() {
   return (
     <svg
       width="200"
-      height="140"
+      height="200"
       viewBox="0 0 200 140"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      {/* Reading interface */}
+      {/* Simple reading interface */}
       <g transform="translate(15, 15)">
         <rect
           x="0"
@@ -467,9 +467,8 @@ function AnimatedPlaybackSVG() {
           strokeWidth="1.5"
         />
 
-        {/* Text content with continuous underline highlighting */}
+        {/* Simple text content */}
         <g transform="translate(15, 20)">
-          {/* First sentence: "The quick brown fox" */}
           <text
             x="0"
             y="0"
@@ -478,16 +477,8 @@ function AnimatedPlaybackSVG() {
             opacity="0.5"
             fontFamily="system-ui"
           >
-            <tspan>The</tspan>
-            <tspan dx="3"> </tspan>
-            <tspan dx="3">quick</tspan>
-            <tspan dx="3"> </tspan>
-            <tspan dx="3">brown</tspan>
-            <tspan dx="3"> </tspan>
-            <tspan dx="3">fox</tspan>
+            The quick brown fox
           </text>
-
-          {/* Second sentence */}
           <text
             x="0"
             y="20"
@@ -496,16 +487,8 @@ function AnimatedPlaybackSVG() {
             opacity="0.5"
             fontFamily="system-ui"
           >
-            <tspan>jumps</tspan>
-            <tspan dx="3"> </tspan>
-            <tspan dx="3">over</tspan>
-            <tspan dx="3"> </tspan>
-            <tspan dx="3">the</tspan>
-            <tspan dx="3"> </tspan>
-            <tspan dx="3">lazy</tspan>
+            jumps over the lazy
           </text>
-
-          {/* Third sentence */}
           <text
             x="0"
             y="40"
@@ -514,102 +497,11 @@ function AnimatedPlaybackSVG() {
             opacity="0.5"
             fontFamily="system-ui"
           >
-            <tspan>dog</tspan>
-            <tspan dx="3"> </tspan>
-            <tspan dx="3">in</tspan>
-            <tspan dx="3"> </tspan>
-            <tspan dx="3">the</tspan>
-            <tspan dx="3"> </tspan>
-            <tspan dx="3">garden</tspan>
+            dog in the garden
           </text>
-
-          {/* Continuous flowing underline that moves across all text */}
-          <line
-            x1="0"
-            y1="3"
-            x2="0"
-            y2="3"
-            stroke={accent}
-            strokeWidth="2.5"
-            strokeLinecap="round"
-          >
-            <animate
-              attributeName="x1"
-              values="-2;-2;21;21;56;56;97;97;-2;-2;33;33;64;64;88;88;117;117;-2;-2;22;22;36;36;59;59;100;100;-2"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="x2"
-              values="-2;20;20;55;55;96;96;120;120;-2;32;32;63;63;87;87;116;116;140;140;-2;21;21;35;35;58;58;99;99;138;138;-2"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="y1"
-              values="3;3;3;3;3;3;3;3;3;23;23;23;23;23;23;23;23;23;23;43;43;43;43;43;43;43;43;43;43;43;3"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="y2"
-              values="3;3;3;3;3;3;3;3;3;23;23;23;23;23;23;23;23;23;23;43;43;43;43;43;43;43;43;43;43;43;3"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="opacity"
-              values="0;1;1;1;1;1;1;1;1;0;1;1;1;1;1;1;1;1;1;0;1;1;1;1;1;1;1;1;1;1;0"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-          </line>
-
-          {/* Glow effect on underline */}
-          <line
-            x1="0"
-            y1="3"
-            x2="0"
-            y2="3"
-            stroke={accent}
-            strokeWidth="6"
-            strokeLinecap="round"
-            opacity="0.2"
-          >
-            <animate
-              attributeName="x1"
-              values="-2;-2;21;21;56;56;97;97;-2;-2;33;33;64;64;88;88;117;117;-2;-2;22;22;36;36;59;59;100;100;-2"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="x2"
-              values="-2;20;20;55;55;96;96;120;120;-2;32;32;63;63;87;87;116;116;140;140;-2;21;21;35;35;58;58;99;99;138;138;-2"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="y1"
-              values="3;3;3;3;3;3;3;3;3;23;23;23;23;23;23;23;23;23;23;43;43;43;43;43;43;43;43;43;43;43;3"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="y2"
-              values="3;3;3;3;3;3;3;3;3;23;23;23;23;23;23;23;23;23;23;43;43;43;43;43;43;43;43;43;43;43;3"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="opacity"
-              values="0;0.3;0.3;0.3;0.3;0.3;0.3;0.3;0.3;0;0.3;0.3;0.3;0.3;0.3;0.3;0.3;0.3;0.3;0;0.3;0.3;0.3;0.3;0.3;0.3;0.3;0.3;0.3;0.3;0"
-              dur="9s"
-              repeatCount="indefinite"
-            />
-          </line>
         </g>
 
-        {/* Audio waveform visualization at bottom with more spacing */}
+        {/* Simple audio visualization */}
         <g transform="translate(20, 70)">
           {[...Array(12)].map((_, i) => (
             <rect
@@ -648,7 +540,7 @@ function AnimatedPlaybackSVG() {
         </g>
       </g>
 
-      {/* Play button indicator */}
+      {/* Simple play button */}
       <g transform="translate(175, 25)">
         <circle
           cx="0"
