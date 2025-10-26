@@ -92,11 +92,6 @@ export function WelcomeModal({ forceOpen, onClose }: WelcomeModalProps) {
             />
           </div>
 
-          <div className="text-xs text-neutral-500 text-center border-t border-white/5 pt-4">
-            Usage analytics are collected (IP address, input text) for service
-            improvement.
-          </div>
-
           <div className="flex justify-center">
             <button
               onClick={handleClose}
