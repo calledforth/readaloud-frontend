@@ -9,7 +9,7 @@ import { TruncatedPreview } from "../../components/TruncatedPreview";
 import { ChunkFeed } from "../../components/ChunkFeed";
 import { ReaderView } from "../../components/ReaderView";
 import { MiniPlayer } from "../../components/MiniPlayer";
-import { Settings, History } from "lucide-react";
+import { History } from "lucide-react";
 import { synthesizeChunk } from "../../lib/provider";
 import { useSessionHistory } from "../../lib/useSessionHistory";
 import { HistoryModal } from "../../components/HistoryModal";
@@ -207,9 +207,6 @@ export default function SessionPage() {
                 <History className="w-5 h-5 text-neutral-400" />
               </button>
             </HistoryModal>
-            <button className="p-2 rounded-full" aria-label="Settings" style={{ marginRight: 0 }}>
-              <Settings className="w-4 h-4 text-white" />
-            </button>
           </div>
         }
       />
