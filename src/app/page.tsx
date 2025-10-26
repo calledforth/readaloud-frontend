@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { TopBar } from "../components/TopBar";
 import { HistoryModal } from "../components/HistoryModal";
 import { WelcomeModal } from "../components/WelcomeModal";
+import { HelpCircle } from "lucide-react";
 
 export default function Home() {
   const { setDocId, setChunks, setCurrentIndex, addController } = useAppStore();
@@ -33,6 +34,7 @@ export default function Home() {
   const [status, setStatus] = useState<UiStatus>(null);
   const [textErrorOnce, setTextErrorOnce] = useState(false);
   const [pdfErrorOnce, setPdfErrorOnce] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const router = useRouter();
   const { startSession, resumeSession, sessions, refresh } = useSessionHistory();
 
@@ -206,46 +208,58 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-200">
-      <WelcomeModal />
+      <WelcomeModal 
+        forceOpen={showWelcomeModal} 
+        onClose={() => setShowWelcomeModal(false)} 
+      />
       <TopBar
         right={
-          <HistoryModal sessions={sessions} onResume={async (id) => {
-            const rec = await resumeSession(id);
-            if (!rec) return;
-
-            // Hydrate store with saved session
-            setDocId(rec.docId);
-            // Normalize chunk statuses to ensure the current chunk is playable and autoplay can trigger
-            const normalized = rec.chunks.map((c) => {
-              if (rec.hasBeenCompleted) {
-                // Completed sessions: start fresh; everything becomes ready if audio exists, otherwise queued
-                return {
-                  ...c,
-                  status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued',
-                };
-              } else {
-                // Incomplete sessions: keep original statuses but ensure consistency
-                return c;
-              }
-            });
-            setChunks(normalized);
-            setCurrentIndex(rec.currentIndex);
-            // Hard reset playback metrics/state for a brand new session to avoid stale highlights
-            useAppStore.getState().setPlaybackMetrics(0, 0);
-            useAppStore.getState().setPlaying(false);
-            useAppStore.getState().setSessionStatus('in_progress');
-            // Session ID is already set by the resumeSession function
-
-            // Navigate to session page
-            router.push('/session');
-          }} onRefresh={refresh}>
+          <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowWelcomeModal(true)}
               className="p-2 rounded-md hover:bg-white/10 transition-colors"
-              aria-label="Session history"
+              aria-label="Show welcome guide"
             >
-              <History className="w-5 h-5 text-neutral-400" />
+              <HelpCircle className="w-5 h-5 text-neutral-400" />
             </button>
-          </HistoryModal>
+            <HistoryModal sessions={sessions} onResume={async (id) => {
+              const rec = await resumeSession(id);
+              if (!rec) return;
+
+              // Hydrate store with saved session
+              setDocId(rec.docId);
+              // Normalize chunk statuses to ensure the current chunk is playable and autoplay can trigger
+              const normalized = rec.chunks.map((c) => {
+                if (rec.hasBeenCompleted) {
+                  // Completed sessions: start fresh; everything becomes ready if audio exists, otherwise queued
+                  return {
+                    ...c,
+                    status: (c.audioBase64 ? 'ready' : 'queued') as 'ready' | 'queued',
+                  };
+                } else {
+                  // Incomplete sessions: keep original statuses but ensure consistency
+                  return c;
+                }
+              });
+              setChunks(normalized);
+              setCurrentIndex(rec.currentIndex);
+              // Hard reset playback metrics/state for a brand new session to avoid stale highlights
+              useAppStore.getState().setPlaybackMetrics(0, 0);
+              useAppStore.getState().setPlaying(false);
+              useAppStore.getState().setSessionStatus('in_progress');
+              // Session ID is already set by the resumeSession function
+
+              // Navigate to session page
+              router.push('/session');
+            }} onRefresh={refresh}>
+              <button
+                className="p-2 rounded-md hover:bg-white/10 transition-colors"
+                aria-label="Session history"
+              >
+                <History className="w-5 h-5 text-neutral-400" />
+              </button>
+            </HistoryModal>
+          </div>
         }
       />
       <div className="mx-auto w-[min(820px,92vw)] pt-12 md:pt-16 pb-10 space-y-6 px-3 md:px-0">
